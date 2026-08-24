@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Agenda Chantier</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1A56DB">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Agenda Chantier">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+:root{
+  --bg:#F0F4F8;--surface:#FFF;--border:#DDE3EC;
+  --primary:#1A56DB;--primary-dark:#1440B0;
+  --accent:#0D9F6E;--accent-dark:#0A7D57;
+  --danger:#E53E3E;--warn:#DD6B20;
+  --text:#1A202C;--muted:#718096;
+  --shadow:0 2px 8px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);--r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+html{overflow-x:hidden;}
+
+/* ── Connexion ── */
+#auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.auth-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:380px;width:100%;box-shadow:var(--shadow);}
+.auth-box .brand-icon{width:44px;height:44px;background:linear-gradient(135deg,#1A56DB,#0D9F6E);border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px;}
+.auth-box h1{font-size:1.15rem;margin-bottom:6px;}
+.auth-box p{color:var(--muted);font-size:.82rem;margin-bottom:20px;line-height:1.5;}
+.auth-box input{width:100%;background:#FAFBFC;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:.9rem;margin-bottom:10px;}
+.auth-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(26,86,219,.1);}
+.auth-box button{width:100%;background:var(--primary);color:#fff;border:none;border-radius:10px;padding:12px;font-size:.9rem;font-weight:700;cursor:pointer;margin-top:6px;}
+.auth-box button:hover{background:var(--primary-dark);}
+.auth-box button:disabled{opacity:.5;cursor:not-allowed;}
+#auth-error{color:var(--danger);font-size:.78rem;margin-top:10px;display:none;}
+
+/* ── Ecran de maintenance (gate) ── */
+#maint-gate{position:fixed;inset:0;background:linear-gradient(135deg,#0F172A 0%,#1E293B 100%);display:none;align-items:center;justify-content:center;z-index:99999;padding:20px;}
+#maint-gate.visible{display:flex;}
+#maint-gate .maint-icon{width:44px;height:44px;background:linear-gradient(135deg,#1A56DB,#0D9F6E);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:20px;}
+#maint-gate .maint-msg{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;white-space:pre-wrap;text-align:left;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+#maint-gate .maint-code-input{text-align:center;letter-spacing:4px;font-size:18px;font-weight:700;}
+#maint-gate-error{color:var(--danger);font-size:.78rem;margin-top:0;margin-bottom:10px;display:none;}
+
+/* ── App ── */
+#app{display:none;min-height:100vh;flex-direction:column;}
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+header .brand{display:flex;align-items:center;gap:10px;}
+header .brand .ic{width:36px;height:36px;background:linear-gradient(135deg,#1A56DB,#0D9F6E);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#fff;flex-shrink:0;}
+header .brand h1{font-size:15px;font-weight:800;line-height:1.2;}
+header .brand span{font-size:11px;color:var(--muted);display:block;}
+header .right{display:flex;align-items:center;gap:10px;}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;}
+.sync-dot.off{background:var(--danger);}
+.sync-dot.busy{background:var(--warn);}
+.logout-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:.75rem;font-weight:600;cursor:pointer;}
+.logout-btn:hover{color:var(--text);border-color:var(--muted);}
+
+/* stats strip */
+.stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:16px 20px 0;max-width:1300px;margin:0 auto;width:100%;}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;}
+.stat-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.stat-icon.blue{background:#EFF6FF;}.stat-icon.green{background:#ECFDF5;}.stat-icon.orange{background:#FFF7ED;}.stat-icon.purple{background:#F5F3FF;}
+.stat-text .label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.stat-text .value{font-size:19px;font-weight:800;color:var(--text);line-height:1.2;margin-top:2px;}
+
+.layout{display:flex;max-width:1300px;margin:0 auto;width:100%;flex:1;gap:18px;padding:16px 20px 40px;}
+.side{width:290px;flex-shrink:0;}
+main{flex:1;min-width:0;}
+@media(max-width:900px){.layout{flex-direction:column;}.side{width:100%;}}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);}
+.card-pad{padding:16px 18px;}
+
+/* Recherche */
+.search-box{position:relative;margin-bottom:14px;}
+.search-box input{width:100%;padding:10px 14px 10px 34px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;background:#FAFBFC;}
+.search-box input:focus{outline:none;border-color:var(--primary);background:#fff;}
+.search-box .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
+.search-results{margin-top:8px;max-height:220px;overflow-y:auto;display:none;}
+.search-results.show{display:block;}
+.sr-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12.5px;}
+.sr-item:hover{background:#F8FAFC;}
+.sr-item .t{font-weight:700;}
+.sr-item .d{color:var(--muted);font-size:11px;}
+
+/* Mini calendrier */
+.cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.cal-month{font-size:14px;font-weight:800;}
+.cal-btn{background:var(--surface);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.cal-btn:hover{background:var(--primary);color:#fff;border-color:var(--primary);}
+.mcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.mcal-dn{text-align:center;font-size:9.5px;font-weight:700;color:var(--muted);padding:4px 0;text-transform:uppercase;}
+.mcal-day{position:relative;text-align:center;font-size:11.5px;padding:6px 0;border-radius:7px;cursor:pointer;font-weight:600;}
+.mcal-day:hover{background:#F0F4F8;}
+.mcal-day.other{color:#CBD5E1;}
+.mcal-day.today{outline:1.5px solid var(--primary);}
+.mcal-day.sel{background:var(--primary);color:#fff;}
+.mcal-dots{display:flex;justify-content:center;gap:2px;margin-top:2px;}
+.mcal-dots span{width:4px;height:4px;border-radius:50%;}
+.mcal-day.bloque{background:#FEE2E2;color:#B91C1C;}
+.mcal-day.bloque:hover{background:#FECACA;}
+.mcal-bloque-ic{font-size:9px;margin-top:1px;}
+
+.legend{margin-top:14px;display:flex;flex-direction:column;gap:6px;}
+.legend-item{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:7px;}
+.legend-item:hover{background:#F8FAFC;}
+.legend-item.off{opacity:.4;}
+.legend-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0;}
+.d-chantier{background:#1D4ED8;}.d-devis{background:#B45309;}.d-facture{background:#15803D;}.d-autre{background:#6D28D9;}
+
+/* Jour view */
+.day-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.day-nav{display:flex;align-items:center;gap:8px;}
+.day-title{font-size:19px;font-weight:800;text-transform:capitalize;}
+.day-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap;}
+.btn-primary{background:var(--primary);color:#fff;box-shadow:0 2px 6px rgba(26,86,219,.25);}.btn-primary:hover{background:var(--primary-dark);}
+.btn-accent{background:var(--accent);color:#fff;}.btn-accent:hover{background:var(--accent-dark);}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}.btn-ghost:hover{background:var(--bg);color:var(--text);}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px;}
+.btn-today{background:#FAFBFC;border:1px solid var(--border);color:var(--text);}
+
+.ev-card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--shadow);}
+.ev-card.t-chantier{border-left-color:#1D4ED8;}
+.ev-card.t-devis{border-left-color:#B45309;}
+.ev-card.t-facture{border-left-color:#15803D;}
+.ev-card.t-autre{border-left-color:#6D28D9;}
+.ev-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+.ev-time{font-size:12px;font-weight:800;color:var(--primary);white-space:nowrap;}
+.ev-title{font-size:15px;font-weight:800;margin-top:2px;}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+.bd{background:#EFF6FF;color:#1D4ED8;}.bf{background:#F0FDF4;color:#15803D;}
+.bp{background:#DCFCE7;color:#15803D;}.ba{background:#FEF9C3;color:#854D0E;}.ban{background:#FEE2E2;color:#B91C1C;}.bg{background:#F3E8FF;color:#6D28D9;}
+.ev-actions{display:flex;gap:6px;}
+.ev-client{margin-top:10px;padding-top:10px;border-top:1px solid #F1F5F9;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;}
+.ev-client .who{font-size:13px;font-weight:700;cursor:pointer;color:var(--primary);}
+.ev-client .who:hover{text-decoration:underline;}
+.ev-contact-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
+.ev-contact-row a{font-size:11.5px;color:var(--muted);text-decoration:none;display:inline-flex;align-items:center;gap:4px;}
+.ev-contact-row a:hover{color:var(--primary);}
+.ev-lieu{font-size:12px;color:var(--muted);margin-top:8px;}
+.ev-lieu a{color:var(--muted);text-decoration:none;}
+.ev-lieu a:hover{color:var(--primary);text-decoration:underline;}
+.ev-notes{font-size:12.5px;color:var(--text);background:#FAFBFC;border-radius:7px;padding:8px 10px;margin-top:8px;white-space:pre-wrap;}
+.ev-docs{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+.ev-doc-chip{font-size:11px;padding:4px 9px;border-radius:7px;background:#F8FAFC;border:1px solid var(--border);cursor:pointer;font-weight:600;}
+.ev-doc-chip:hover{border-color:var(--primary);}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+.empty-state .ic{font-size:34px;margin-bottom:10px;}
+.empty-state p{font-size:13px;margin-bottom:16px;}
+
+.upcoming{margin-top:26px;}
+.upcoming h3{font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:10px;}
+.up-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;font-size:12.5px;}
+.up-item:hover{background:#F8FAFC;}
+.up-date{font-weight:800;color:var(--primary);width:60px;flex-shrink:0;font-size:11.5px;text-transform:uppercase;}
+.up-t{flex:1;font-weight:600;}
+.up-c{color:var(--muted);font-size:11.5px;}
+
+/* Modals */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:100;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border-radius:14px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.25);}
+.modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;border-radius:14px 14px 0 0;}
+.modal-header h2{font-size:15.5px;font-weight:700;}
+.close-btn{background:none;border:none;font-size:16px;cursor:pointer;color:var(--muted);}
+.close-btn:hover{color:var(--text);}
+.modal-body{padding:22px;}
+.modal-footer{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+.fg{display:flex;flex-direction:column;gap:5px;}
+.fg label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.fg input,.fg select,.fg textarea{padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;width:100%;background:#FAFBFC;}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--primary);background:#fff;box-shadow:0 0 0 3px rgba(26,86,219,.1);}
+.fg textarea{resize:vertical;min-height:60px;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.s2{grid-column:1/-1;}
+@media(max-width:480px){.g2{grid-template-columns:1fr;}}
+.ev-col-opt{width:32px;height:32px;border-radius:8px;cursor:pointer;border:2.5px solid transparent;transition:.15s;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.ev-col-opt.sel{border-color:var(--text);transform:scale(1.1);}
+.ev-col-opt.c-chantier{background:#DBEAFE;}.ev-col-opt.c-devis{background:#FEF9C3;}.ev-col-opt.c-facture{background:#DCFCE7;}.ev-col-opt.c-autre{background:#F3E8FF;}
+
+.cc-block{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.cc-row{display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid #F1F5F9;}
+.cc-row span:first-child{color:var(--muted);font-weight:600;}
+.cc-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.docs-list{margin-top:6px;}
+.doc-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;font-size:12.5px;}
+.doc-row:nth-child(odd){background:#FAFBFC;}
+
+.save-toast{position:fixed;bottom:-80px;right:24px;background:#1E293B;color:#F1F5F9;padding:14px 18px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);font-size:13px;z-index:9999;display:flex;align-items:center;gap:10px;transition:bottom .35s cubic-bezier(.34,1.56,.64,1);max-width:340px;}
+.save-toast.show{bottom:24px;}
+
+/* ═══ MOBILE ═══ */
+@media(max-width:680px){
+  .layout{padding:10px 10px 30px;gap:12px;}
+  .modal{max-width:96vw !important;border-radius:12px;}
+  .save-toast{right:10px;left:10px;max-width:none;}
+  .cc-row{flex-wrap:wrap;gap:2px;}
+  .doc-row{flex-wrap:wrap;gap:6px;}
+}
+</style>
+</head>
+<body>
+  <div id="mode-test-banner" style="display:none;position:sticky;top:0;z-index:200;background:#F59E0B;color:#1A1206;font-weight:700;font-size:12px;padding:6px 10px;text-align:center;align-items:center;justify-content:center;gap:6px">
+    🧪 MODE TEST — données séparées
+    <button onclick="demanderCodeDeveloppeur()" style="background:#1A1206;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:700;cursor:pointer">Revenir aux vraies données</button>
+  </div>
+
+<!-- ═══ ECRAN DE MAINTENANCE ═══ -->
+<!-- Controle depuis dashboard.html (panel "Controle des sites"). Bloque tout le monde,
+     y compris les comptes deja connectes sur cet appareil, tant que le code de deverrouillage
+     defini au moment de l'activation n'a pas ete saisi. -->
+<div id="maint-gate">
+  <div class="auth-box" style="text-align:center">
+    <div class="maint-icon">🔧</div>
+    <h1>Agenda en maintenance</h1>
+    <div class="maint-msg" id="maint-gate-message">L'agenda chantier est actuellement en maintenance. Merci de repasser bientôt.</div>
+    <div id="maint-gate-error"></div>
+    <input type="password" inputmode="numeric" class="maint-code-input" id="maint-gate-code" placeholder="Code de déblocage" onkeypress="if(event.key==='Enter')tenterDeverrouillageAgenda()">
+    <button onclick="tenterDeverrouillageAgenda()">Déverrouiller</button>
+  </div>
+</div>
+
+<!-- ═══ CONNEXION ═══ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="brand-icon">🔨</div>
+    <h1>Agenda Chantier</h1>
+    <p>Connectez-vous avec votre compte pour voir le planning des chantiers, connecté à vos devis et factures.</p>
+    <input type="email" id="auth-email" placeholder="Email" autocomplete="username">
+    <input type="password" id="auth-password" placeholder="Mot de passe" autocomplete="current-password">
+    <button id="auth-btn" onclick="doLogin()">Se connecter</button>
+    <div id="auth-error"></div>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="ic">🔨</div>
+      <div>
+        <h1 id="hdr-title">Agenda Chantier</h1>
+        <span id="hdr-sub">Planning connecté aux devis &amp; factures</span>
+      </div>
+    </div>
+    <div class="right">
+      <span class="sync-dot" id="sync-dot" title="Synchronisation"></span>
+      <button class="btn btn-ghost btn-sm" onclick="openModalBrouillonsDevis()" title="Notes pour un futur devis, à finaliser depuis Gestion devis & factures">📝 Brouillons devis<span id="nav-brouillon-badge" style="display:none;background:#1A56DB;color:#fff;border-radius:9px;font-size:10px;padding:1px 6px;margin-left:4px"></span></button>
+      <button class="btn btn-ghost btn-sm" onclick="openModalIncident()" title="Signaler un problème ou un incident" style="color:#DC2626">⚠️ Signaler un problème</button>
+      <button class="btn btn-ghost btn-sm" onclick="openModalEquipe()" title="Gérer l'équipe terrain">👥 Équipe</button>
+      <button class="btn btn-ghost btn-sm" onclick="openModalVehicules()" title="Carnet de bord véhicules">🚐 Véhicules<span id="nav-vehicule-badge" style="display:none;background:#EF4444;color:#fff;border-radius:9px;font-size:10px;padding:1px 6px;margin-left:4px"></span></button>
+      <span onclick="demanderCodeDeveloppeur()" style="font-size:10.5px;color:var(--muted);cursor:default;opacity:.4;margin-right:4px" title="Zone technique">⚙</span>
+      <button class="logout-btn" onclick="doLogout()">Déconnexion</button>
+    </div>
+  </header>
+
+  <div class="stats-strip" id="stats-strip"></div>
+  <div id="chantiers-retard-alerte"></div>
+  <div id="vehicules-alerte"></div>
+  <div id="notes-rdv-attente-alerte"></div>
+  <div id="rappel-chantier-demain"></div>
+
+  <div class="layout">
+    <div class="side">
+      <div class="card card-pad">
+        <div class="search-box">
+          <span class="ic">🔎</span>
+          <input id="search-input" placeholder="Chercher un client, un chantier..." oninput="onSearch()">
+          <div class="search-results" id="search-results"></div>
+        </div>
+        <div class="cal-hdr">
+          <button class="cal-btn" onclick="mcalNav(-1)">‹</button>
+          <div class="cal-month" id="mcal-label"></div>
+          <button class="cal-btn" onclick="mcalNav(1)">›</button>
+        </div>
+        <div class="mcal-grid" id="mcal-grid"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="card card-pad" style="margin-top:16px">
+        <div class="upcoming" style="margin-top:0">
+          <h3>À venir</h3>
+          <div id="upcoming-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <main>
+      <div class="day-hdr">
+        <div>
+          <div class="day-title" id="day-title">—</div>
+          <div class="day-sub" id="day-sub"></div>
+        </div>
+        <div class="day-nav">
+          <button class="cal-btn" onclick="dayNav(-1)">‹</button>
+          <button class="btn btn-today btn-sm" onclick="goToday()">Aujourd'hui</button>
+          <button class="cal-btn" onclick="dayNav(1)">›</button>
+          <input type="date" id="day-picker" onchange="goToDate(this.value)" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 9px;font-size:12.5px;">
+          <button class="btn btn-primary btn-sm" onclick="openEventModal(null,selectedDate)">+ Nouveau</button>
+        </div>
+      </div>
+      <div id="day-bandeau-bloque" style="display:none;align-items:center;gap:8px;background:#FEE2E2;color:#B91C1C;padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:600;margin-bottom:12px"></div>
+      <div id="day-list"></div>
+    </main>
+  </div>
+</div>
+
+<!-- MODAL ÉVÉNEMENT -->
+<div class="modal-overlay" id="modal-event">
+  <div class="modal">
+    <div class="modal-header"><h2 id="ev-modal-title">Nouveau chantier</h2><button class="close-btn" onclick="closeModal('modal-event')">✕</button></div>
+    <div class="modal-body">
+      <div class="g2">
+        <div class="fg s2"><label>Titre *</label><input id="ev-titre" placeholder="Chantier Dupont — Peinture"></div>
+        <div class="fg s2"><label>Client</label><select id="ev-client"><option value="">-- Aucun --</option></select></div>
+        <div class="fg"><label>Date début *</label><input type="date" id="ev-start"></div>
+        <div class="fg"><label>Date fin</label><input type="date" id="ev-end"></div>
+        <div class="fg"><label>Heure début</label><input type="time" id="ev-hstart" value="08:00"></div>
+        <div class="fg"><label>Heure fin</label><input type="time" id="ev-hend" value="17:00"></div>
+        <div class="fg s2"><label>Lieu / Adresse chantier</label><input id="ev-lieu" placeholder="12 rue de la Paix, 59000 Lille" oninput="renderHistoriqueAdresse()"></div>
+        <div class="fg s2" id="ev-historique-adresse-zone" style="display:none">
+          <label>📍 Interventions précédentes à cette adresse</label>
+          <div id="ev-historique-adresse-liste" style="font-size:12px"></div>
+        </div>
+        <div class="fg"><label>Statut</label>
+          <select id="ev-statut" onchange="majAffichageNoteProchainRdv()">
+            <option value="a-faire">À faire</option>
+            <option value="en-cours">En cours</option>
+            <option value="termine">Terminé</option>
+          </select>
+        </div>
+        <div class="fg s2" id="ev-note-rdv-zone">
+          <label>📌 Note pour le prochain rendez-vous</label>
+          <textarea id="ev-note-prochain-rdv" rows="2" placeholder="Ex : revenir dans 3 mois pour vérifier l'étanchéité, prévoir telle pièce, client absent le vendredi…"></textarea>
+        </div>
+        <div class="fg"><label>Équipe assignée</label>
+          <div id="ev-equipe-liste" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Gérer la liste d'équipe depuis l'onglet Équipe.</div>
+        </div>
+        <div class="fg s2"><label>Notes</label><textarea id="ev-notes"></textarea></div>
+        <div class="fg s2"><label>Checklist matériel</label>
+          <div id="ev-materiel-liste"></div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <input id="ev-materiel-nouveau" placeholder="ex: Perceuse, échafaudage…" style="flex:1">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="ajouterMaterielEvenement()">+ Ajouter</button>
+          </div>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:12px"><label>Type</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <div class="ev-col-opt c-chantier sel" data-type="chantier" onclick="selEvType(this)" title="Chantier">🔨</div>
+          <div class="ev-col-opt c-devis" data-type="devis" onclick="selEvType(this)" title="Devis / RDV">📋</div>
+          <div class="ev-col-opt c-facture" data-type="facture" onclick="selEvType(this)" title="Facture / Paiement">💶</div>
+          <div class="ev-col-opt c-autre" data-type="autre" onclick="selEvType(this)" title="Autre">📌</div>
+        </div>
+        <input type="hidden" id="ev-type" value="chantier">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-event')">Annuler</button>
+      <button id="ev-del-btn" class="btn btn-danger" style="display:none" onclick="deleteEvent()">🗑 Supprimer</button>
+      <button class="btn btn-primary" onclick="saveEvent()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SUIVI CHANTIER (pointage, photos, rapport) — accessible uniquement sur un evenement deja enregistre -->
+<div class="modal-overlay" id="modal-suivi">
+  <div class="modal">
+    <div class="modal-header"><h2 id="suivi-modal-title">Suivi chantier</h2><button class="close-btn" onclick="closeModal('modal-suivi')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg s2">
+        <button type="button" class="btn btn-ghost btn-sm" id="suivi-btn-itineraire" onclick="ouvrirItineraireChantier()">🧭 Itinéraire vers ce chantier</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="afficherRappelMaterielARamener(suiviEvId)">🧰 Vérifier le matériel à ramener</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="creerBrouillonDepuisChantier()">📝 Noter un devis à faire</button>
+      </div>
+      <div class="fg s2" style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:10px">
+        <label style="margin-bottom:6px">⏱️ Pointage rapide (avec géolocalisation)</label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="pointage-rapide-employe" style="flex:1;min-width:140px"></select>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-pointage-arrivee" onclick="pointerArriveeRapide()">🟢 Arrivée</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-pointage-depart" onclick="pointerDepartRapide()" style="display:none">🔴 Départ</button>
+        </div>
+        <div id="pointage-rapide-statut" style="font-size:11.5px;color:var(--muted);margin-top:6px"></div>
+      </div>
+      <div class="fg s2">
+        <label>Mes heures travaillées (saisie manuelle)</label>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div class="fg" style="margin:0;flex:1;min-width:140px"><label style="font-size:11px">Employé</label><select id="suivi-pointage-employe" style="width:100%"></select></div>
+          <div class="fg" style="margin:0"><label style="font-size:11px">Date</label><input type="date" id="suivi-pointage-date"></div>
+          <div class="fg" style="margin:0;width:80px"><label style="font-size:11px">Heures</label><input type="number" step="0.25" min="0" max="24" id="suivi-pointage-heures" placeholder="7.5"></div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="ajouterPointageEvenement()">+ Ajouter</button>
+        </div>
+        <div id="suivi-pointage-liste" style="margin-top:8px"></div>
+      </div>
+      <div class="fg s2" style="margin-top:14px">
+        <label>Matériel pris sur ce chantier</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="ouvrirScanMaterielSuivi()">📷 Scanner un outil</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="basculerCodeMaterielSuivi()">⌨️ Saisir un code</button>
+          <div class="fg" style="margin:0;flex:1;min-width:140px"><label style="font-size:11px">Pris par</label><select id="suivi-materiel-employe" style="width:100%"></select></div>
+          <div class="fg" style="margin:0;flex:1;min-width:140px"><label style="font-size:11px">Retour prévu le</label><input type="date" id="suivi-materiel-date-retour" style="width:100%"></div>
+        </div>
+        <div id="suivi-materiel-scan-zone" style="display:none;margin-top:8px"></div>
+        <div id="suivi-materiel-code-zone" style="display:none;margin-top:8px">
+          <div style="display:flex;gap:6px">
+            <input id="suivi-materiel-code-saisie" placeholder="Référence, nom ou n° de série" style="flex:1" onkeydown="if(event.key==='Enter')validerCodeMaterielSuivi()">
+            <button type="button" class="btn btn-primary btn-sm" onclick="validerCodeMaterielSuivi()">OK</button>
+          </div>
+        </div>
+        <div id="suivi-materiel-resultat" style="margin-top:8px;font-size:12.5px"></div>
+        <div id="suivi-materiel-liste" style="margin-top:10px"></div>
+      </div>
+      <div class="fg s2" style="margin-top:14px">
+        <label>Photos avant / après (envoyées sur Google Drive)</label>
+        <div id="suivi-gdrive-statut" style="font-size:11.5px;color:var(--muted);margin-bottom:6px">Non connecté à Google Drive.</div>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="gdrivePhotosConnecter()">🔗 Connecter Google Drive</button>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">📷 Ajouter photo « avant »<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploaderPhotoChantier(this,'avant')"></label>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer">📷 Ajouter photo « après »<input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploaderPhotoChantier(this,'apres')"></label>
+        </div>
+        <div id="suivi-photos-progression" style="font-size:11.5px;color:var(--muted);margin-top:6px"></div>
+        <div id="suivi-photos-liste" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+      <div class="fg s2" style="margin-top:14px">
+        <label>Rapport de fin de chantier</label>
+        <textarea id="suivi-rapport" placeholder="Travaux réalisés, remarques, éléments à signaler…" rows="4"></textarea>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="enregistrerRapportChantier()">💾 Enregistrer le rapport</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="genererRapportFinChantierAgenda()">📄 Générer le rapport PDF</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-suivi')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SIGNALEMENT D'INCIDENT : accessible a tout moment (bouton d'en-tete), permet a un
+     ouvrier de signaler un probleme rapidement sur le terrain, rattache si possible au
+     chantier du jour. Enregistre dans la collection Firestore "incidentsChantier". -->
+<div class="modal-overlay" id="modal-incident">
+  <div class="modal">
+    <div class="modal-header"><h2>⚠️ Signaler un problème</h2><button class="close-btn" onclick="closeModal('modal-incident')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg">
+        <label>Chantier concerné (optionnel)</label>
+        <select id="incident-chantier"><option value="">— Aucun / autre —</option></select>
+      </div>
+      <div class="fg">
+        <label>Gravité</label>
+        <select id="incident-gravite">
+          <option value="info">Information</option>
+          <option value="attention" selected>À surveiller</option>
+          <option value="urgent">Urgent — bloque le chantier</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Description du problème</label>
+        <textarea id="incident-description" rows="4" placeholder="Décrivez ce qui se passe : matériel cassé, accès bloqué, souci de sécurité, retard imprévu…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-incident')">Annuler</button>
+      <button class="btn btn-primary" onclick="envoyerSignalementIncident()">🚨 Envoyer le signalement</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RETOUR MATERIEL (etat + commentaire), meme principe que sur Gestion devis & factures -->
+<div class="modal-overlay" id="modal-retour-materiel-agenda">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><h2>↩️ Retour d'outil</h2><button class="close-btn" onclick="closeModal('modal-retour-materiel-agenda')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-weight:700;margin-bottom:12px" id="mtra-nom"></div>
+      <div class="fg">
+        <label>État de l'outil au retour</label>
+        <select id="mtra-etat">
+          <option value="bon">✅ Bon état</option>
+          <option value="a_reparer">🔧 À réparer</option>
+          <option value="perdu">❌ Perdu / manquant</option>
+        </select>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label>Commentaire (optionnel)</label>
+        <textarea id="mtra-commentaire" style="min-height:60px" placeholder="Ex : lame émoussée, batterie à changer..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-retour-materiel-agenda')">Annuler</button>
+      <button class="btn btn-primary" onclick="confirmerRetourMaterielSuivi()">✅ Confirmer le retour</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GESTION EQUIPE -->
+<div class="modal-overlay" id="modal-equipe">
+  <div class="modal">
+    <div class="modal-header"><h2>Équipe terrain</h2><button class="close-btn" onclick="closeModal('modal-equipe')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px">Liste des salariés enregistrés (créés depuis le Dashboard → Sécurité &amp; comptes).</p>
+      <div id="equipe-liste-gestion"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-equipe')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VEHICULES : carnet de bord (km, controle technique, revision), meme principe
+     d'alerte que pour le materiel soumis a controle periodique. -->
+<div class="modal-overlay" id="modal-vehicules">
+  <div class="modal">
+    <div class="modal-header"><h2>🚐 Carnet de bord véhicules</h2><button class="close-btn" onclick="closeModal('modal-vehicules')">✕</button></div>
+    <div class="modal-body">
+      <div id="vehicules-liste"></div>
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+        <h3 style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:8px" id="vehicule-form-titre">Ajouter un véhicule</h3>
+        <input type="hidden" id="veh-edit-id">
+        <div class="fg"><label>Nom / désignation</label><input id="veh-nom" placeholder="Camion Renault Master"></div>
+        <div class="fg"><label>Immatriculation</label><input id="veh-immat" placeholder="AB-123-CD"></div>
+        <div style="display:flex;gap:8px">
+          <div class="fg" style="flex:1"><label>Kilométrage actuel</label><input type="number" id="veh-km" placeholder="85000"></div>
+          <div class="fg" style="flex:1"><label>Prochaine révision (km)</label><input type="number" id="veh-km-revision" placeholder="90000"></div>
+        </div>
+        <div class="fg"><label>Prochain contrôle technique</label><input type="date" id="veh-controle-technique"></div>
+        <div class="fg"><label>Notes</label><textarea id="veh-notes" rows="2" placeholder="Assurance, contrat, remarques..."></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-primary" onclick="saveVehicule()">💾 Enregistrer</button>
+          <button type="button" class="btn btn-ghost" id="veh-btn-annuler" style="display:none" onclick="annulerEditionVehicule()">Annuler la modification</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-vehicules')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BROUILLONS DE DEVIS : simples notes pour ne rien oublier de ce qu'il faut chiffrer,
+     SANS creer de vrai devis ni rien publier vers le client. La transformation en devis reel
+     se fait depuis gestion-devis-factures.html (page "Brouillons de devis"), qui cree le
+     document en le laissant masque du client (visibleClient=false) tant qu'il n'est pas
+     explicitement publie par l'administrateur. -->
+<div class="modal-overlay" id="modal-brouillons-devis">
+  <div class="modal">
+    <div class="modal-header"><h2>📝 Brouillons de devis</h2><button class="close-btn" onclick="closeModal('modal-brouillons-devis')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:11.5px;color:var(--muted);margin-bottom:10px">Ce ne sont que des notes internes — le client ne les voit jamais. Le devis réel sera créé et chiffré depuis Gestion devis & factures, et restera invisible pour le client tant qu'il ne sera pas explicitement publié.</p>
+      <div id="brouillons-devis-liste"></div>
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+        <h3 style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:8px" id="brouillon-form-titre">Nouveau brouillon</h3>
+        <input type="hidden" id="brouillon-edit-id">
+        <div class="fg"><label>Client</label><select id="brouillon-client"><option value="">-- Aucun / à préciser --</option></select></div>
+        <div class="fg"><label>Objet</label><input id="brouillon-objet" placeholder="Remplacement chaudière, reprise carrelage salle de bain..."></div>
+        <div class="fg"><label>Notes / éléments à chiffrer</label><textarea id="brouillon-notes" rows="4" placeholder="Ce qui a été vu sur place, dimensions, quantités estimées, contraintes d'accès, délai souhaité par le client..."></textarea></div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-primary" onclick="saveBrouillonDevis()">💾 Enregistrer</button>
+          <button type="button" class="btn btn-ghost" id="brouillon-btn-annuler" style="display:none" onclick="annulerEditionBrouillon()">Annuler la modification</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-brouillons-devis')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FICHE CONTACT -->
+<div class="modal-overlay" id="modal-contact">
+  <div class="modal">
+    <div class="modal-header"><h2 id="cc-title">Fiche client</h2><button class="close-btn" onclick="closeModal('modal-contact')">✕</button></div>
+    <div class="modal-body">
+      <div class="cc-block" id="cc-info"></div>
+      <div class="cc-actions" id="cc-actions"></div>
+      <div style="margin-top:18px">
+        <h3 style="font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">Devis &amp; factures</h3>
+        <div class="docs-list" id="cc-docs"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-contact')">Fermer</button></div>
+  </div>
+</div>
+
+<div class="save-toast" id="save-toast">✓ Enregistré</div>
+
+<script>
+// ═══ FIREBASE (meme projet et meme base partagee que Gestion Devis & Factures) ═══
+var FIREBASE_CONFIG={
+  apiKey:"AIzaSyCg6ZhR0-LYxynuuABQNc1RMqu2E8IaFc4",
+  authDomain:"facturedevis-2684d.firebaseapp.com",
+  projectId:"facturedevis-2684d",
+  storageBucket:"facturedevis-2684d.firebasestorage.app",
+  messagingSenderId:"702834434238",
+  appId:"1:702834434238:web:03650c40921bbe61577eef"
+};
+var DOC_PARTAGE_UID='V61nytHZpuVvDh72Ra4ClFy2bJg1'; // identifiant reel de l'entreprise — ne JAMAIS modifier
+
+// ═══ MODE TEST DEVELOPPEUR (code 1101) ═════════════════════════════════
+// Identique aux autres applications : bascule sur un document Firestore separe
+// (memorise sur cet appareil), pour tester sans jamais toucher aux vraies donnees.
+var MODE_TEST_STORAGE_KEY='nico_mode_test';
+function estModeTestActif(){return localStorage.getItem(MODE_TEST_STORAGE_KEY)==='1';}
+var DOC_ACTIF=estModeTestActif()?(DOC_PARTAGE_UID+'_TEST'):DOC_PARTAGE_UID;
+document.addEventListener('DOMContentLoaded',function(){
+  if(estModeTestActif()){
+    var b=document.getElementById('mode-test-banner');
+    if(b)b.style.display='flex';
+  }
+});
+function demanderCodeDeveloppeur(){
+  var code=prompt('Code développeur :');
+  if(code===null)return;
+  if(code.trim()!=='1101'){alert('Code incorrect.');return;}
+  if(estModeTestActif()){
+    localStorage.removeItem(MODE_TEST_STORAGE_KEY);
+    alert('Mode test désactivé.\n\nVous repassez sur vos vraies données. La page va se recharger.');
+  }else{
+    localStorage.setItem(MODE_TEST_STORAGE_KEY,'1');
+    alert('🧪 Mode test activé.\n\nVous travaillez maintenant sur une base de données totalement séparée de vos vraies données. Tout ce que vous créez, modifiez ou supprimez ici reste dans cet espace de test. Les sauvegardes fonctionnent normalement, juste isolées.\n\nPour revenir à vos vraies données, entrez à nouveau le code 1101.\n\nLa page va se recharger.');
+  }
+  location.reload();
+}
+var fbApp=firebase.initializeApp(FIREBASE_CONFIG);
+var fbAuth=firebase.auth();
+var fbDb=firebase.firestore();
+var fbUser=null;
+var fbSyncUnsubscribe=null;
+
+// ═══ TRACABILITE GLOBALE (voir vitrine.html pour le detail du fonctionnement). ═══
+function traceEvent(type,detail){
+  if(!fbDb)return;
+  fbDb.collection('traceGlobale').add({
+    site:'agenda',type:type,detail:detail||'',date:firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function(e){console.error('Erreur traçage:',e);});
+}
+
+// ═══ DONNEES (lecture temps reel depuis la meme base que Devis & Factures) ═══
+var db={params:{},clients:[],documents:[],events:[]};
+
+// ═══ AUTH ═══
+function doLogin(){
+  var email=document.getElementById('auth-email').value.trim();
+  var pass=document.getElementById('auth-password').value;
+  var errEl=document.getElementById('auth-error');
+  errEl.style.display='none';
+  if(!email||!pass){errEl.textContent='Renseignez email et mot de passe.';errEl.style.display='block';return;}
+  document.getElementById('auth-btn').disabled=true;
+  document.getElementById('auth-btn').textContent='Connexion...';
+  fbAuth.signInWithEmailAndPassword(email,pass).catch(function(e){
+    document.getElementById('auth-btn').disabled=false;
+    document.getElementById('auth-btn').textContent='Se connecter';
+    var msg='Erreur de connexion.';
+    if(e.code==='auth/wrong-password')msg='Mot de passe incorrect.';
+    else if(e.code==='auth/user-not-found')msg='Utilisateur introuvable.';
+    else if(e.code==='auth/invalid-email')msg='Email invalide.';
+    else if(e.code==='auth/too-many-requests')msg='Trop de tentatives, réessayez plus tard.';
+    errEl.textContent=msg;errEl.style.display='block';
+  });
+}
+document.getElementById('auth-password').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+function doLogout(){fbAuth.signOut();}
+
+// ═══ ECRAN DE MAINTENANCE : bloque tout, y compris les sessions deja connectees, tant que
+// le code de deverrouillage (defini depuis dashboard.html) n'a pas ete saisi sur cet appareil. ═══
+var agendaAppDemarree=false;
+var maintenanceAgendaCodeAttendu='';
+
+function demarrerAgendaNormal(){
+  document.getElementById('maint-gate').classList.remove('visible');
+  if(agendaAppDemarree)return;
+  agendaAppDemarree=true;
+  attacherAuthListenerAgenda();
+  chargerJoursBloquesAgenda();
+}
+
+function afficherGateMaintenanceAgenda(cfg){
+  document.getElementById('maint-gate-message').textContent=cfg.maintenanceAgendaMessage||'L\'agenda chantier est actuellement en maintenance. Merci de repasser bientôt.';
+  document.getElementById('maint-gate').classList.add('visible');
+  document.getElementById('maint-gate-error').style.display='none';
+  var champ=document.getElementById('maint-gate-code');
+  if(champ){champ.style.display='';champ.value='';setTimeout(function(){champ.focus();},100);}
+  var btn=document.querySelector('#maint-gate button');
+  if(btn)btn.style.display='';
+}
+
+function tenterDeverrouillageAgenda(){
+  var code=document.getElementById('maint-gate-code').value.trim();
+  var erreurEl=document.getElementById('maint-gate-error');
+  if(code&&code===maintenanceAgendaCodeAttendu){
+    try{localStorage.setItem('agenda_unlock_code',code);}catch(e){}
+    demarrerAgendaNormal();
+  }else{
+    erreurEl.textContent='Code incorrect.';
+    erreurEl.style.display='block';
+  }
+}
+
+function demarrerEcouteMaintenanceAgenda(){
+  fbDb.collection('siteConfig').doc('main').onSnapshot(function(doc){
+    var cfg=doc.exists?doc.data():{};
+    var expiree=cfg.maintenanceAgendaExpiration&&new Date(cfg.maintenanceAgendaExpiration)<new Date();
+    var actif=!!cfg.maintenanceAgendaActive&&!expiree;
+    maintenanceAgendaCodeAttendu=cfg.maintenanceAgendaCode||'';
+
+    var codeMemorise=null;
+    try{codeMemorise=localStorage.getItem('agenda_unlock_code');}catch(e){}
+    var debloqueIci=!!(codeMemorise&&maintenanceAgendaCodeAttendu&&codeMemorise===maintenanceAgendaCodeAttendu);
+
+    if(actif&&!debloqueIci){
+      if(fbAuth&&fbAuth.currentUser){
+        fbAuth.signOut().catch(function(e){console.error('Erreur deconnexion pour maintenance agenda:',e);});
+      }
+      afficherGateMaintenanceAgenda(cfg);
+    }else{
+      demarrerAgendaNormal();
+    }
+  },function(e){
+    console.error('Erreur ecoute maintenance agenda (on demarre quand meme):',e);
+    demarrerAgendaNormal();
+  });
+}
+
+// ═══ JOURS BLOQUES (conges, indisponibilite definis depuis dashboard.html) : l'agenda reste
+// utilisable normalement, seuls les jours concernes apparaissent grises dans le calendrier
+// et la vue jour, avec le motif affiche. ═══
+var _joursBloquesCacheAgenda=[];
+function chargerJoursBloquesAgenda(){
+  if(!fbDb)return;
+  fbDb.collection('joursBloques').onSnapshot(function(snap){
+    _joursBloquesCacheAgenda=[];
+    snap.forEach(function(doc){_joursBloquesCacheAgenda.push(doc.data());});
+    renderAll();
+  },function(e){console.error('Erreur chargement jours bloques:',e);});
+}
+function motifJourBloqueAgenda(ds){
+  var trouve=null;
+  _joursBloquesCacheAgenda.forEach(function(j){
+    if(ds>=j.dateDebut&&ds<=j.dateFin)trouve=j.motif||'Journée bloquée';
+  });
+  return trouve;
+}
+
+function attacherAuthListenerAgenda(){
+fbAuth.onAuthStateChanged(function(user){
+  if(user){
+    fbUser=user;
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    traceEvent('page_vue','Connexion agenda — '+user.email);
+    chargerSalarieConnecteAgenda();
+    startListener();
+    afficherWelcomeModalSiPremiereFoisAgenda();
+  }else{
+    fbUser=null;
+    if(fbSyncUnsubscribe){fbSyncUnsubscribe();fbSyncUnsubscribe=null;}
+    document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('app').style.display='none';
+    document.getElementById('auth-btn').disabled=false;
+    document.getElementById('auth-btn').textContent='Se connecter';
+  }
+});
+}
+
+demarrerEcouteMaintenanceAgenda();
+
+function setSync(state){
+  var d=document.getElementById('sync-dot');
+  d.className='sync-dot'+(state==='off'?' off':state==='busy'?' busy':'');
+}
+
+function startListener(){
+  setSync('busy');
+  fbSyncUnsubscribe=fbDb.collection('users').doc(DOC_ACTIF).onSnapshot(function(doc){
+    if(doc.exists&&doc.data().db){
+      db=doc.data().db;
+      db.clients=db.clients||[];db.documents=db.documents||[];db.events=db.events||[];db.params=db.params||{};db.equipeTerrain=db.equipeTerrain||[];db.materiel=db.materiel||[];db.vehicules=db.vehicules||[];db.brouillonsDevis=db.brouillonsDevis||[];
+      document.getElementById('hdr-title').textContent=db.params.nom||'Agenda Chantier';
+      renderAll();
+      setSync('on');
+    }
+    setSync('on');
+  },function(e){console.error('Erreur listener:',e);setSync('off');});
+}
+
+// ═══ ECRITURE (uniquement le champ db.events, pour ne jamais ecraser le reste des donnees) ═══
+function pushEvents(){
+  if(!fbUser)return;
+  showToast('syncing');
+  fbDb.collection('users').doc(DOC_ACTIF).update({'db.events':db.events,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .then(function(){showToast('ok');})
+    .catch(function(e){console.error('Erreur sauvegarde:',e);showToast('err');});
+}
+// Pousse uniquement la liste d'equipe terrain (separee de pushEvents pour ne jamais
+// interferer avec la sauvegarde des evenements en cours d'edition ailleurs).
+function pushEquipeTerrain(){
+  if(!fbUser)return;
+  fbDb.collection('users').doc(DOC_ACTIF).update({'db.equipeTerrain':db.equipeTerrain||[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .catch(function(e){console.error('Erreur sauvegarde équipe:',e);});
+}
+// Pousse uniquement db.materiel — meme logique que pushEquipeTerrain, pour ne jamais
+// ecraser db.events en cours d'edition depuis un autre onglet/appareil.
+function pushMateriel(){
+  if(!fbUser)return;
+  fbDb.collection('users').doc(DOC_ACTIF).update({'db.materiel':db.materiel||[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .catch(function(e){console.error('Erreur sauvegarde matériel:',e);});
+}
+// Pousse uniquement db.vehicules — meme logique que pushMateriel.
+function pushVehicules(){
+  if(!fbUser)return;
+  fbDb.collection('users').doc(DOC_ACTIF).update({'db.vehicules':db.vehicules||[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .catch(function(e){console.error('Erreur sauvegarde véhicules:',e);});
+}
+// Pousse uniquement db.brouillonsDevis — meme logique que pushMateriel/pushVehicules.
+function pushBrouillonsDevis(){
+  if(!fbUser)return;
+  fbDb.collection('users').doc(DOC_ACTIF).update({'db.brouillonsDevis':db.brouillonsDevis||[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
+    .catch(function(e){console.error('Erreur sauvegarde brouillons devis:',e);});
+}
+function showToast(state){
+  var t=document.getElementById('save-toast');
+  if(state==='syncing'){t.textContent='… Enregistrement';t.style.background='#1E293B';}
+  else if(state==='ok'){t.textContent='✓ Enregistré';t.style.background='#1E293B';}
+  else{t.textContent='⚠ Erreur de sauvegarde';t.style.background='#7F1D1D';}
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer=setTimeout(function(){t.classList.remove('show');},2200);
+}
+
+// ═══ HELPERS ═══
+function esc(s){return(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ═══ POP-UP DE BIENVENUE (premiere connexion, une seule fois par navigateur) ═══
+var WELCOME_STORAGE_KEY_AGENDA='nico_welcome_vu_agenda';
+function afficherWelcomeModalSiPremiereFoisAgenda(){
+  if(localStorage.getItem(WELCOME_STORAGE_KEY_AGENDA)==='1')return;
+  var m=document.getElementById('welcome-modal-agenda');
+  if(m)m.classList.add('open');
+}
+function fermerWelcomeModalAgenda(){
+  localStorage.setItem(WELCOME_STORAGE_KEY_AGENDA,'1');
+  var m=document.getElementById('welcome-modal-agenda');
+  if(m)m.classList.remove('open');
+}
+function fmt(n){return(parseFloat(n)||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDate(d){if(!d)return'';var p=d.split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}
+function todayStr(){return new Date().toISOString().split('T')[0];}
+function addDays(ds,n){var d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0];}
+var TYPE_LABEL={chantier:'🔨 Chantier',devis:'📋 Devis / RDV',facture:'💶 Facture',autre:'📌 Autre'};
+var TYPE_DOT={chantier:'d-chantier',devis:'d-devis',facture:'d-facture',autre:'d-autre'};
+var STATUT_BADGE={
+  'en-cours':'ba','emise':'bd','payee':'bp','annulee':'ban','en-attente':'ba'
+};
+function statutClass(s){return STATUT_BADGE[s]||'bd';}
+function clientById(id){return (db.clients||[]).find(function(c){return String(c.id)===String(id);});}
+function docsForClient(clientId){
+  return (db.documents||[]).filter(function(d){return String(d.clientId)===String(clientId);})
+    .sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+}
+
+// ═══ ETAT ═══
+var selectedDate=todayStr();
+var mcalY=new Date().getFullYear(),mcalM=new Date().getMonth();
+var activeTypes={chantier:true,devis:true,facture:true,autre:true};
+
+function renderAll(){
+  renderStats();
+  renderMiniCal();
+  renderLegend();
+  renderDayView();
+  renderUpcoming();
+}
+
+// Chantiers dont la date de fin prevue est depassee sans que le statut soit passe a
+// "termine" — alerte visible en permanence sous les stats, tant que non traite.
+function chantiersEnRetard(){
+  var today=todayStr();
+  return (db.events||[]).filter(function(e){
+    return e.type==='chantier'&&e.statut!=='termine'&&(e.end||e.start)<today;
+  }).sort(function(a,b){return (a.end||a.start).localeCompare(b.end||b.start);});
+}
+
+function renderAlerteChantiersEnRetard(){
+  var el=document.getElementById('chantiers-retard-alerte');
+  if(!el)return;
+  var liste=chantiersEnRetard();
+  if(!liste.length){el.innerHTML='';return;}
+  var lignes=liste.map(function(e){
+    var jours=Math.round((new Date(todayStr())-new Date(e.end||e.start))/86400000);
+    return esc(e.titre)+' (fin prévue le '+fmtDate(e.end||e.start)+', en retard de '+jours+' j)';
+  }).join(' · ');
+  el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;margin:0 0 14px 0">'+
+    '<span style="font-size:13px;color:#DC2626">🔨⏰ '+liste.length+' chantier(s) en retard : '+lignes+'</span>'+
+    '<button class="btn btn-ghost btn-sm" onclick="ouvrirPremierChantierEnRetard()">Voir</button>'+
+  '</div>';
+}
+
+function ouvrirPremierChantierEnRetard(){
+  var liste=chantiersEnRetard();
+  if(!liste.length)return;
+  openSuiviModal(liste[0].id);
+}
+
+// ═══ STATS EN TETE ═══
+function renderStats(){
+  renderAlerteChantiersEnRetard();
+  afficherRappelChantierDemain();
+  renderAlerteVehicules();
+  renderNotesRdvEnAttente();
+  majBadgeBrouillonsDevis();
+  var today=todayStr();
+  var weekEnd=addDays(today,7);
+  var chantiersSemaine=(db.events||[]).filter(function(e){return e.type==='chantier'&&e.start<=weekEnd&&(e.end||e.start)>=today;}).length;
+  var devisEnCours=(db.documents||[]).filter(function(d){return d.type==='devis'&&d.statut!=='annulee'&&!d.convertiEnFacture;}).length;
+  var facturesImpayees=(db.documents||[]).filter(function(d){return d.type==='facture'&&d.statut!=='payee'&&d.statut!=='annulee';}).length;
+  var evAuj=(db.events||[]).filter(function(e){return today>=e.start&&today<=(e.end||e.start);}).length;
+  var cards=[
+    {ic:'🔨',cls:'blue',v:evAuj,l:"Aujourd'hui"},
+    {ic:'📅',cls:'purple',v:chantiersSemaine,l:'Chantiers (7 jours)'},
+    {ic:'📋',cls:'orange',v:devisEnCours,l:'Devis en cours'},
+    {ic:'💶',cls:'green',v:facturesImpayees,l:'Factures impayées'}
+  ];
+  document.getElementById('stats-strip').innerHTML=cards.map(function(c){
+    return '<div class="stat"><div class="stat-icon '+c.cls+'">'+c.ic+'</div><div class="stat-text"><div class="label">'+esc(c.l)+'</div><div class="value">'+c.v+'</div></div></div>';
+  }).join('');
+}
+
+// ═══ MINI CALENDRIER ═══
+var MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+var DAYS=['L','M','M','J','V','S','D'];
+function mcalNav(n){mcalM+=n;if(mcalM>11){mcalM=0;mcalY++;}if(mcalM<0){mcalM=11;mcalY--;}renderMiniCal();}
+function renderMiniCal(){
+  document.getElementById('mcal-label').textContent=MONTHS[mcalM]+' '+mcalY;
+  var first=new Date(mcalY,mcalM,1),last=new Date(mcalY,mcalM+1,0);
+  var sdow=first.getDay();if(sdow===0)sdow=7;
+  var today=todayStr();
+  var html=DAYS.map(function(d){return'<div class="mcal-dn">'+d+'</div>';}).join('');
+  for(var i=1;i<sdow;i++){var pd=new Date(mcalY,mcalM,1-sdow+i);html+='<div class="mcal-day other">'+pd.getDate()+'</div>';}
+  for(var d2=1;d2<=last.getDate();d2++){
+    var ds=mcalY+'-'+String(mcalM+1).padStart(2,'0')+'-'+String(d2).padStart(2,'0');
+    var evs=(db.events||[]).filter(function(e){return activeTypes[e.type]!==false&&ds>=e.start&&ds<=(e.end||e.start);});
+    var types={};evs.forEach(function(e){types[e.type]=true;});
+    var dots=Object.keys(types).slice(0,4).map(function(t){return'<span style="background:var(--muted)" class="'+ (TYPE_DOT[t]?'':'') +'"></span>';}).join('');
+    // build colored dots properly
+    dots=Object.keys(types).slice(0,4).map(function(t){
+      var col={chantier:'#1D4ED8',devis:'#B45309',facture:'#15803D',autre:'#6D28D9'}[t]||'#94A3B8';
+      return '<span style="background:'+col+'"></span>';
+    }).join('');
+    var cls='mcal-day'+(ds===today?' today':'')+(ds===selectedDate?' sel':'');
+    var motifBloque=motifJourBloqueAgenda(ds);
+    if(motifBloque)cls+=' bloque';
+    html+='<div class="'+cls+'" onclick="goToDate(\''+ds+'\')" '+(motifBloque?'title="🚫 '+esc(motifBloque)+'"':'')+'>'+d2+(motifBloque?'<div class="mcal-bloque-ic">🚫</div>':'<div class="mcal-dots">'+dots+'</div>')+'</div>';
+  }
+  var tot=sdow-1+last.getDate(),rem=(7-tot%7)%7;
+  for(var j=1;j<=rem;j++)html+='<div class="mcal-day other">'+j+'</div>';
+  document.getElementById('mcal-grid').innerHTML=html;
+}
+
+function renderLegend(){
+  var items=[
+    {t:'chantier',ic:'🔨',l:'Chantier'},
+    {t:'devis',ic:'📋',l:'Devis / RDV'},
+    {t:'facture',ic:'💶',l:'Facture'},
+    {t:'autre',ic:'📌',l:'Autre'}
+  ];
+  document.getElementById('legend').innerHTML=items.map(function(it){
+    return '<div class="legend-item'+(activeTypes[it.t]===false?' off':'')+'" onclick="toggleType(\''+it.t+'\')"><span class="legend-dot '+TYPE_DOT[it.t]+'"></span>'+it.ic+' '+it.l+'</div>';
+  }).join('');
+}
+function toggleType(t){activeTypes[t]=activeTypes[t]===false?true:false;renderMiniCal();renderDayView();}
+
+// ═══ NAVIGATION JOUR ═══
+function dayNav(n){goToDate(addDays(selectedDate,n));}
+function goToday(){goToDate(todayStr());}
+function goToDate(ds){
+  selectedDate=ds;
+  var d=new Date(ds+'T00:00:00');
+  if(d.getFullYear()!==mcalY||d.getMonth()!==mcalM){mcalY=d.getFullYear();mcalM=d.getMonth();}
+  document.getElementById('day-picker').value=ds;
+  renderMiniCal();
+  renderDayView();
+  document.getElementById('search-results').classList.remove('show');
+  document.getElementById('search-input').value='';
+}
+
+function renderDayView(){
+  var d=new Date(selectedDate+'T00:00:00');
+  var today=todayStr();
+  var titre=d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('day-title').textContent=titre;
+  document.getElementById('day-sub').textContent=selectedDate===today?"C'est aujourd'hui":'';
+  document.getElementById('day-picker').value=selectedDate;
+
+  var motifBloque=motifJourBloqueAgenda(selectedDate);
+  var bandeauEl=document.getElementById('day-bandeau-bloque');
+  if(bandeauEl){
+    bandeauEl.style.display=motifBloque?'flex':'none';
+    if(motifBloque)bandeauEl.textContent='🚫 Journée bloquée : '+motifBloque;
+  }
+
+  var evs=(db.events||[]).filter(function(e){
+    return activeTypes[e.type]!==false&&selectedDate>=e.start&&selectedDate<=(e.end||e.start);
+  }).sort(function(a,b){return (a.hstart||'').localeCompare(b.hstart||'');});
+
+  var list=document.getElementById('day-list');
+  if(!evs.length){
+    list.innerHTML='<div class="empty-state"><div class="ic">📭</div><p>Aucun événement ce jour-là.</p><button class="btn btn-primary" onclick="openEventModal(null,selectedDate)">+ Ajouter un chantier</button></div>';
+    return;
+  }
+  list.innerHTML=evs.map(function(e){return renderEvCard(e);}).join('');
+}
+
+function renderEvCard(e){
+  var c=e.clientId?clientById(e.clientId):null;
+  var badgeCls={chantier:'bd',devis:'ba',facture:'bp',autre:'bg'}[e.type]||'bd';
+  var contactRow='';
+  if(c){
+    var addr=[c.adresse,c.cp,c.ville].filter(Boolean).join(' ');
+    var parts=[];
+    if(c.tel)parts.push('<a href="tel:'+esc(c.tel.replace(/\s/g,''))+'">📞 '+esc(c.tel)+'</a>');
+    if(c.email)parts.push('<a href="mailto:'+esc(c.email)+'">✉️ '+esc(c.email)+'</a>');
+    contactRow='<div class="ev-client"><div><span class="who" onclick="openContactModal(\''+c.id+'\')">👤 '+esc(c.nom)+'</span>'+
+      (c.contact?'<div style="font-size:11.5px;color:var(--muted)">'+esc(c.contact)+'</div>':'')+
+      '<div class="ev-contact-row">'+parts.join('')+'</div></div></div>';
+  }
+  var lieu=e.lieu?('<div class="ev-lieu">📍 <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(e.lieu)+'" target="_blank" rel="noopener">'+esc(e.lieu)+' — itinéraire</a></div>'):'';
+  var notes=e.notes?'<div class="ev-notes">'+esc(e.notes)+'</div>':'';
+  var docsHtml='';
+  if(c){
+    var docs=docsForClient(c.id).slice(0,3);
+    if(docs.length){
+      docsHtml='<div class="ev-docs">'+docs.map(function(d){
+        var lbl=(d.type==='devis'?'📋':'💶')+' '+esc(d.numero)+' · '+fmt(d.totalHT)+' € · '+esc(d.statut||'');
+        return '<span class="ev-doc-chip" onclick="openContactModal(\''+c.id+'\')">'+lbl+'</span>';
+      }).join('')+'</div>';
+    }
+  }
+  var dateRange=e.end&&e.end!==e.start?(fmtDate(e.start)+' → '+fmtDate(e.end)):'';
+  return '<div class="ev-card t-'+e.type+'">'+
+    '<div class="ev-top">'+
+      '<div><div class="ev-time">'+(e.hstart||'')+(e.hend?' – '+e.hend:'')+(dateRange?' <span style="color:var(--muted);font-weight:600">· '+dateRange+'</span>':'')+'</div>'+
+      '<div class="ev-title">'+esc(e.titre)+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:8px"><span class="badge '+badgeCls+'">'+TYPE_LABEL[e.type]+'</span>'+
+      '<div class="ev-actions"><button class="btn btn-ghost btn-sm" onclick="openSuiviModal(\''+e.id+'\')" title="Suivi chantier">🧰</button><button class="btn btn-ghost btn-sm" onclick="openEventModal(\''+e.id+'\',null)">✏️</button><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="askDeleteEvent(\''+e.id+'\')">🗑</button></div></div>'+
+    '</div>'+
+    (e.statut?'<div style="margin-top:4px"><span class="badge '+(e.statut==='termine'?'bp':e.statut==='en-cours'?'ba':'bd')+'">'+(e.statut==='termine'?'✅ Terminé':e.statut==='en-cours'?'🔧 En cours':'⏳ À faire')+'</span>'+(e.equipe&&e.equipe.length?' <span style="font-size:11px;color:var(--muted)">👥 '+esc(e.equipe.join(', '))+'</span>':'')+'</div>':'')+
+    contactRow+lieu+notes+docsHtml+
+  '</div>';
+}
+
+// ═══ A VENIR ═══
+function renderUpcoming(){
+  var today=todayStr();
+  var evs=(db.events||[]).filter(function(e){return (e.end||e.start)>=today;})
+    .sort(function(a,b){return a.start.localeCompare(b.start)||(a.hstart||'').localeCompare(b.hstart||'');})
+    .slice(0,8);
+  var el=document.getElementById('upcoming-list');
+  if(!evs.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">Rien de prévu.</div>';return;}
+  el.innerHTML=evs.map(function(e){
+    var c=e.clientId?clientById(e.clientId):null;
+    var d=new Date(e.start+'T00:00:00');
+    var lbl=d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+    return '<div class="up-item" onclick="goToDate(\''+e.start+'\')"><div class="up-date">'+lbl+'</div><div><div class="up-t">'+esc(e.titre)+'</div>'+(c?'<div class="up-c">'+esc(c.nom)+'</div>':'')+'</div></div>';
+  }).join('');
+}
+
+// ═══ RECHERCHE ═══
+function onSearch(){
+  var q=document.getElementById('search-input').value.trim().toLowerCase();
+  var box=document.getElementById('search-results');
+  if(!q){box.classList.remove('show');box.innerHTML='';return;}
+  var results=(db.events||[]).filter(function(e){
+    var c=e.clientId?clientById(e.clientId):null;
+    return (e.titre||'').toLowerCase().indexOf(q)>-1||(c&&(c.nom||'').toLowerCase().indexOf(q)>-1)||(e.lieu||'').toLowerCase().indexOf(q)>-1;
+  }).sort(function(a,b){return a.start.localeCompare(b.start);}).slice(0,10);
+  var clientMatches=(db.clients||[]).filter(function(c){return (c.nom||'').toLowerCase().indexOf(q)>-1;}).slice(0,5);
+  var html='';
+  results.forEach(function(e){
+    var c=e.clientId?clientById(e.clientId):null;
+    html+='<div class="sr-item" onclick="goToDate(\''+e.start+'\')"><div class="t">'+esc(e.titre)+'</div><div class="d">'+fmtDate(e.start)+(c?' · '+esc(c.nom):'')+'</div></div>';
+  });
+  clientMatches.forEach(function(c){
+    html+='<div class="sr-item" onclick="openContactModal(\''+c.id+'\')"><div class="t">👤 '+esc(c.nom)+'</div><div class="d">Voir la fiche client</div></div>';
+  });
+  box.innerHTML=html||'<div style="padding:10px;font-size:12px;color:var(--muted)">Aucun résultat.</div>';
+  box.classList.add('show');
+}
+
+// ═══ MODAL EVENEMENT ═══
+var editEvId=null,selEvType='chantier';
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+
+// Normalise une adresse pour le rapprochement (minuscules, sans accents, espaces
+// multiples reduits) : deux saisies legerement differentes de la meme adresse
+// ("12 Rue de la Paix" vs "12 rue de la paix") seront ainsi reconnues comme identiques.
+function normaliserAdresse(a){
+  return (a||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+}
+
+// Met en avant le champ "Note pour le prochain RDV" quand le chantier est marque comme
+// Termine, pour inciter a le remplir avant de fermer le formulaire (sans forcer la saisie).
+function majAffichageNoteProchainRdv(){
+  var zone=document.getElementById('ev-note-rdv-zone');
+  var champ=document.getElementById('ev-note-prochain-rdv');
+  if(!zone||!champ)return;
+  var termine=document.getElementById('ev-statut').value==='termine';
+  if(termine){
+    zone.style.background='#FFFBEB';zone.style.border='1px solid #FDE68A';zone.style.borderRadius='8px';zone.style.padding='10px';
+    champ.placeholder='Chantier terminé : une prochaine visite est prévue ? Notez-le ici pour ne pas l\'oublier (date approximative, ce qu\'il faudra faire, etc.)';
+  }else{
+    zone.style.background='';zone.style.border='';zone.style.padding='';
+  }
+}
+
+function renderHistoriqueAdresse(){
+  var zone=document.getElementById('ev-historique-adresse-zone');
+  var liste=document.getElementById('ev-historique-adresse-liste');
+  var lieu=document.getElementById('ev-lieu').value.trim();
+  if(!lieu||lieu.length<5){zone.style.display='none';liste.innerHTML='';return;}
+  var lieuNorm=normaliserAdresse(lieu);
+  var precedents=(db.events||[]).filter(function(e){
+    if(editEvId&&String(e.id)===String(editEvId))return false; // exclure l'evenement en cours d'edition
+    return e.lieu&&normaliserAdresse(e.lieu)===lieuNorm;
+  }).sort(function(a,b){return (b.start||'').localeCompare(a.start||'');});
+  if(!precedents.length){zone.style.display='none';liste.innerHTML='';return;}
+  zone.style.display='block';
+  liste.innerHTML=precedents.map(function(e){
+    var c=e.clientId?clientById(e.clientId):null;
+    var statutTxt=({'a-faire':'À faire','en-cours':'En cours','termine':'Terminé'})[e.statut]||e.statut||'';
+    var noteHtml=e.noteProchainRdv?'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:6px 8px;margin-top:3px;font-size:11.5px;color:#92400E">📌 '+esc(e.noteProchainRdv)+'</div>':'';
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--border)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span>'+fmtDate(e.start)+' — <strong>'+esc(e.titre)+'</strong>'+(c?' ('+esc(c.nom)+')':'')+' <span style="color:var(--muted)">'+esc(statutTxt)+'</span></span>'+
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="closeModal(\'modal-event\');openSuiviModal('+e.id+')">Voir</button>'+
+      '</div>'+noteHtml+'</div>';
+  }).join('');
+}
+
+function openEventModal(id,prefillDate){
+  editEvId=id||null;
+  document.getElementById('ev-modal-title').textContent=editEvId?"Modifier l'événement":'Nouveau chantier';
+  document.getElementById('ev-del-btn').style.display=editEvId?'inline-flex':'none';
+  var sel=document.getElementById('ev-client');
+  sel.innerHTML='<option value="">-- Aucun --</option>'+(db.clients||[]).map(function(c){return '<option value="'+c.id+'">'+esc(c.nom)+'</option>';}).join('');
+  if(editEvId){
+    var ev=(db.events||[]).find(function(x){return String(x.id)===String(editEvId);});
+    document.getElementById('ev-titre').value=ev.titre||'';
+    sel.value=ev.clientId||'';
+    document.getElementById('ev-start').value=ev.start||'';
+    document.getElementById('ev-end').value=ev.end||'';
+    document.getElementById('ev-hstart').value=ev.hstart||'08:00';
+    document.getElementById('ev-hend').value=ev.hend||'17:00';
+    document.getElementById('ev-lieu').value=ev.lieu||'';
+    document.getElementById('ev-notes').value=ev.notes||'';
+    document.getElementById('ev-statut').value=ev.statut||'a-faire';
+    document.getElementById('ev-note-prochain-rdv').value=ev.noteProchainRdv||'';
+    materielFormulaireEnCours=(ev.materiel||[]).map(function(m){return {nom:m.nom,fait:!!m.fait};});
+    renderEquipeCheckboxesEvenement(ev.equipe||[]);
+    selEvType=ev.type||'chantier';
+  }else{
+    ['ev-titre','ev-lieu','ev-notes'].forEach(function(f){document.getElementById(f).value='';});
+    sel.value='';
+    document.getElementById('ev-start').value=prefillDate||todayStr();
+    document.getElementById('ev-end').value='';
+    document.getElementById('ev-hstart').value='08:00';
+    document.getElementById('ev-hend').value='17:00';
+    document.getElementById('ev-statut').value='a-faire';
+    document.getElementById('ev-note-prochain-rdv').value='';
+    materielFormulaireEnCours=[];
+    renderEquipeCheckboxesEvenement([]);
+    selEvType='chantier';
+  }
+  renderMaterielFormulaire();
+  document.getElementById('ev-type').value=selEvType;
+  document.querySelectorAll('.ev-col-opt').forEach(function(el){el.classList.toggle('sel',el.getAttribute('data-type')===selEvType);});
+  majAffichageNoteProchainRdv();
+  renderHistoriqueAdresse();
+  openModal('modal-event');
+}
+function selEvType(el){
+  selEvType=el.getAttribute('data-type');
+  document.getElementById('ev-type').value=selEvType;
+  document.querySelectorAll('.ev-col-opt').forEach(function(e){e.classList.remove('sel');});
+  el.classList.add('sel');
+}
+function saveEvent(){
+  var titre=document.getElementById('ev-titre').value.trim();
+  if(!titre){alert('Titre obligatoire.');return;}
+  var start=document.getElementById('ev-start').value;
+  if(!start){alert('Date de début obligatoire.');return;}
+  var end=document.getElementById('ev-end').value||start;
+  var motifBloqueSaisie=null;
+  var jStart=start,jEnd=end;
+  _joursBloquesCacheAgenda.forEach(function(j){
+    if(jStart<=j.dateFin&&jEnd>=j.dateDebut)motifBloqueSaisie=j.motif||'Journée bloquée';
+  });
+  if(motifBloqueSaisie){
+    alert('Impossible d\'enregistrer : cette période chevauche un jour bloqué ('+motifBloqueSaisie+'). Modifiez la date ou supprimez d\'abord le blocage depuis le dashboard.');
+    return;
+  }
+  if(!db.events)db.events=[];
+  var obj={
+    titre:titre,
+    clientId:document.getElementById('ev-client').value,
+    start:start,
+    end:end,
+    hstart:document.getElementById('ev-hstart').value,
+    hend:document.getElementById('ev-hend').value,
+    lieu:document.getElementById('ev-lieu').value,
+    notes:document.getElementById('ev-notes').value,
+    type:selEvType,
+    statut:document.getElementById('ev-statut').value,
+    noteProchainRdv:document.getElementById('ev-note-prochain-rdv').value.trim(),
+    equipe:recupererEquipeSelectionneeFormulaire(),
+    materiel:materielFormulaireEnCours.slice()
+  };
+  var ancienStatut=null;
+  if(editEvId){
+    var i=db.events.findIndex(function(x){return String(x.id)===String(editEvId);});
+    if(i>-1){ancienStatut=db.events[i].statut;db.events[i]=Object.assign({},db.events[i],obj);}
+    traceEvent('modif_evenement',titre+' — '+start);
+  }else{
+    obj.id=Date.now();
+    db.events.push(obj);
+    traceEvent('creation_evenement',titre+' — '+start);
+  }
+  pushEvents();
+  var idPourRappel=editEvId||obj.id;
+  closeModal('modal-event');
+  renderAll();
+  if(obj.statut==='termine'&&ancienStatut!=='termine')afficherRappelMaterielARamener(idPourRappel);
+}
+// ═══ RAPPEL MATERIEL A RAMENER : quand un chantier passe au statut "Terminé", verifie
+// s'il reste des outils encore sortis pour ce chantier (via l'historique du materiel
+// suivi) et/ou des elements de la checklist materiel non coches, et le rappelle avant que
+// l'ouvrier ne quitte le chantier. ═══
+function afficherRappelMaterielARamener(eventId){
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(eventId);});
+  if(!ev)return;
+  var outilsNonRendus=(db.materiel||[]).filter(function(m){
+    return (m.historique||[]).some(function(h){return String(h.evenementId)===String(eventId)&&!h.dateRendu;});
+  });
+  var checklistNonFaite=(ev.materiel||[]).filter(function(item){return !item.fait;});
+  if(!outilsNonRendus.length&&!checklistNonFaite.length){alert('✅ Rien à signaler : tout le matériel prévu pour ce chantier a été rendu ou coché.');return;}
+  var lignes=[];
+  outilsNonRendus.forEach(function(m){lignes.push('🧰 '+(m.ref?m.ref+' — ':'')+m.nom+' (toujours enregistré comme sorti — pensez à le rendre)');});
+  checklistNonFaite.forEach(function(item){lignes.push('☐ '+item.nom+' (non coché sur la checklist matériel prévu)');});
+  alert('⚠️ Rappel avant de quitter le chantier « '+ev.titre+' » :\n\n'+lignes.join('\n')+'\n\nPensez à ramener ce matériel et à le marquer comme rendu depuis le suivi du chantier.');
+}
+
+function askDeleteEvent(id){editEvId=id;deleteEvent();}
+function deleteEvent(){
+  if(!confirm('Supprimer cet événement ?'))return;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(editEvId);});
+  db.events=(db.events||[]).filter(function(x){return String(x.id)!==String(editEvId);});
+  traceEvent('suppression_evenement',(ev&&ev.titre)||editEvId);
+  pushEvents();
+  closeModal('modal-event');
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EQUIPE TERRAIN — base desormais sur les vrais salaries (collection Firestore
+// 'salaries', partagee avec compta.html et dashboard.html), et non plus sur une
+// liste de noms libres. La modale "Équipe" devient une vue en lecture seule
+// (creation/edition des salaries se fait depuis le Dashboard).
+// ═══════════════════════════════════════════════════════════════════════
+var _salariesEquipe=[];
+function chargerSalariesEquipe(callback){
+  fbDb.collection('salaries').orderBy('nom').get().then(function(snap){
+    _salariesEquipe=[];
+    snap.forEach(function(doc){var d=doc.data();if(d.statut!=='inactif'&&d.statut!=='archive')_salariesEquipe.push(Object.assign({_id:doc.id},d));});
+    if(callback)callback();
+  }).catch(function(e){console.error('Erreur chargement salariés:',e);if(callback)callback();});
+}
+function openModalEquipe(){
+  chargerSalariesEquipe(renderGestionEquipe);
+  openModal('modal-equipe');
+}
+function renderGestionEquipe(){
+  var el=document.getElementById('equipe-liste-gestion');
+  if(!_salariesEquipe.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">Aucun salarié enregistré. Créez un compte employé depuis le Dashboard (Sécurité &amp; comptes).</div>';return;}
+  el.innerHTML=_salariesEquipe.map(function(s){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border)"><span>'+esc(s.nom||'')+(s.poste?' <span style="color:var(--muted);font-size:11px">— '+esc(s.poste)+'</span>':'')+'</span></div>';
+  }).join('');
+}
+// Affiche les cases a cocher d'equipe dans la modale evenement, a partir des salaries reels
+function renderEquipeCheckboxesEvenement(equipeSelectionnee){
+  var el=document.getElementById('ev-equipe-liste');
+  var afficher=function(){
+    if(!_salariesEquipe.length){el.innerHTML='<span style="font-size:11px;color:var(--muted)">Aucun salarié — créez un compte employé depuis le Dashboard.</span>';return;}
+    el.innerHTML=_salariesEquipe.map(function(s){
+      var checked=(equipeSelectionnee||[]).indexOf(s.nom)!==-1;
+      return '<label style="display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" value="'+esc(s.nom)+'" '+(checked?'checked':'')+' class="ev-equipe-checkbox" style="width:auto"> '+esc(s.nom)+'</label>';
+    }).join('');
+  };
+  if(_salariesEquipe.length)afficher();
+  else chargerSalariesEquipe(afficher);
+}
+function recupererEquipeSelectionneeFormulaire(){
+  return Array.from(document.querySelectorAll('.ev-equipe-checkbox:checked')).map(function(el){return el.value;});
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CHECKLIST MATERIEL (liste par evenement, stockee sur l'evenement lui-meme)
+// ═══════════════════════════════════════════════════════════════════════
+var materielFormulaireEnCours=[];
+function renderMaterielFormulaire(){
+  var el=document.getElementById('ev-materiel-liste');
+  if(!materielFormulaireEnCours.length){el.innerHTML='<div style="font-size:11px;color:var(--muted)">Aucun élément.</div>';return;}
+  el.innerHTML=materielFormulaireEnCours.map(function(item,i){
+    return '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;padding:3px 0">'+
+      '<input type="checkbox" '+(item.fait?'checked':'')+' onchange="toggleMaterielFormulaire('+i+')" style="width:auto"> '+
+      '<span style="'+(item.fait?'text-decoration:line-through;color:var(--muted)':'')+'">'+esc(item.nom)+'</span>'+
+      '<button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 6px" onclick="supprimerMaterielFormulaire('+i+')">✕</button></label>';
+  }).join('');
+}
+function ajouterMaterielEvenement(){
+  var input=document.getElementById('ev-materiel-nouveau');
+  var nom=input.value.trim();
+  if(!nom)return;
+  materielFormulaireEnCours.push({nom:nom,fait:false});
+  input.value='';
+  renderMaterielFormulaire();
+}
+function toggleMaterielFormulaire(i){
+  materielFormulaireEnCours[i].fait=!materielFormulaireEnCours[i].fait;
+  renderMaterielFormulaire();
+}
+function supprimerMaterielFormulaire(i){
+  materielFormulaireEnCours.splice(i,1);
+  renderMaterielFormulaire();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUIVI CHANTIER : pointage d'heures par employé, photos avant/apres (Google Drive), rapport
+// Toutes ces donnees sont stockees directement sur l'evenement concerne
+// (ev.pointagesHeures[], ev.photos[], ev.rapport) et synchronisees via pushEvents().
+// Le champ pointagesHeures est le meme que celui utilise par gestion-devis-factures.html
+// et compta.html — un pointage saisi ici depuis le chantier est immediatement visible
+// pour la fiche de paie de l'employe.
+// ═══════════════════════════════════════════════════════════════════════
+var suiviEvId=null;
+var _salarieConnecteAgenda=null; // fiche salarie correspondant au compte Firebase connecte
+function chargerSalarieConnecteAgenda(callback){
+  if(!fbUser){if(callback)callback();return;}
+  fbDb.collection('salaries').where('email','==',fbUser.email).limit(1).get().then(function(snap){
+    _salarieConnecteAgenda=snap.empty?null:Object.assign({_id:snap.docs[0].id},snap.docs[0].data());
+    if(callback)callback();
+  }).catch(function(e){console.error('Erreur chargement salarié connecté:',e);if(callback)callback();});
+}
+function openSuiviModal(id){
+  suiviEvId=id;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(id);});
+  if(!ev)return;
+  document.getElementById('suivi-modal-title').textContent='Suivi — '+ev.titre;
+  document.getElementById('suivi-rapport').value=ev.rapport||'';
+  document.getElementById('suivi-pointage-date').value=todayStr();
+  var dateRetourDefaut=addDays(todayStr(),7);
+  var champRetourEl=document.getElementById('suivi-materiel-date-retour');
+  if(champRetourEl)champRetourEl.value=dateRetourDefaut;
+  var remplirSelectEmploye=function(){
+    var sel=document.getElementById('suivi-pointage-employe');
+    var selMat=document.getElementById('suivi-materiel-employe');
+    var selRapide=document.getElementById('pointage-rapide-employe');
+    // Priorite a l'equipe assignee au chantier ; sinon tous les salaries connus
+    var equipe=ev.equipe&&ev.equipe.length?ev.equipe:_salariesEquipe.map(function(s){return s.nom;});
+    if(!equipe.length){sel.innerHTML='<option value="">Aucun salarié</option>';selMat.innerHTML='<option value="">Aucun salarié</option>';selRapide.innerHTML='<option value="">Aucun salarié</option>';}
+    else{
+      var options=equipe.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+      sel.innerHTML=options;
+      selMat.innerHTML='<option value="">-- Sélectionner --</option>'+options;
+      selRapide.innerHTML=options;
+      // Pre-selectionne automatiquement l'employe connecte s'il fait partie de l'equipe/liste
+      if(_salarieConnecteAgenda&&equipe.indexOf(_salarieConnecteAgenda.nom)!==-1){
+        sel.value=_salarieConnecteAgenda.nom;
+        selMat.value=_salarieConnecteAgenda.nom;
+        selRapide.value=_salarieConnecteAgenda.nom;
+      }
+    }
+    majAffichagePointageRapide();
+  };
+  var suite=function(){
+    if(_salariesEquipe.length)remplirSelectEmploye();else chargerSalariesEquipe(remplirSelectEmploye);
+  };
+  if(_salarieConnecteAgenda!==null||!fbUser)suite();else chargerSalarieConnecteAgenda(suite);
+  renderPointagesListe(ev);
+  renderPhotosListe(ev);
+  renderMaterielSuivi(ev);
+  gdrivePhotosTenterReconnexionAutomatique();
+  document.getElementById('suivi-btn-itineraire').style.display=ev.lieu?'inline-flex':'none';
+  document.getElementById('pointage-rapide-employe').onchange=majAffichagePointageRapide;
+  openModal('modal-suivi');
+}
+function renderPointagesListe(ev){
+  var el=document.getElementById('suivi-pointage-liste');
+  var liste=ev.pointagesHeures||[];
+  if(!liste.length){el.innerHTML='<div style="font-size:11.5px;color:var(--muted)">Aucun pointage enregistré.</div>';return;}
+  var totalParEmploye={};
+  liste.forEach(function(p){totalParEmploye[p.employe||'—']=(totalParEmploye[p.employe||'—']||0)+(parseFloat(p.heures)||0);});
+  var totaux=Object.keys(totalParEmploye).map(function(n){return '<span class="badge bd" style="font-size:10.5px;margin-right:4px">'+esc(n)+' : '+totalParEmploye[n]+' h</span>';}).join('');
+  var lignes=liste.map(function(p,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">'+
+      '<span>👷 <strong>'+esc(p.employe||'—')+'</strong> · '+esc(p.date||'')+' · '+esc(String(p.heures))+' h</span>'+
+      '<button type="button" class="btn btn-ghost btn-sm" onclick="supprimerPointageEvenement('+i+')">✕</button></div>';
+  }).join('');
+  el.innerHTML='<div style="margin-bottom:6px">'+totaux+'</div>'+lignes;
+}
+
+// ═══ MATERIEL PRIS SUR CE CHANTIER (scan QR ou saisie de code) ═══
+var html5QrScannerSuivi=null;
+function trouverMaterielParCodeAgenda(saisie){
+  var saisieLC=(saisie||'').toLowerCase().trim();
+  if(!saisieLC)return null;
+  var m=(db.materiel||[]).find(function(x){
+    return (x.ref&&x.ref.toLowerCase()===saisieLC)||(x.serie&&x.serie.toLowerCase()===saisieLC)||(x.nom&&x.nom.toLowerCase()===saisieLC);
+  });
+  if(!m){
+    m=(db.materiel||[]).find(function(x){
+      return (x.ref&&x.ref.toLowerCase().indexOf(saisieLC)!==-1)||(x.serie&&x.serie.toLowerCase().indexOf(saisieLC)!==-1)||(x.nom&&x.nom.toLowerCase().indexOf(saisieLC)!==-1);
+    });
+  }
+  return m||null;
+}
+
+function renderMaterielSuivi(ev){
+  var el=document.getElementById('suivi-materiel-liste');
+  var pris=(db.materiel||[]).filter(function(m){
+    return (m.historique||[]).some(function(h){return String(h.evenementId)===String(ev.id)&&!h.dateRendu;});
+  });
+  if(!pris.length){el.innerHTML='<div style="font-size:11.5px;color:var(--muted)">Aucun matériel pris sur ce chantier pour le moment.</div>';return;}
+  var today0=todayStr();
+  el.innerHTML=pris.map(function(m){
+    var retourInfo='';
+    if(m.dateRetourPrevue){
+      var enRetard=m.dateRetourPrevue<today0;
+      retourInfo=' · <span style="'+(enRetard?'color:#DC2626;font-weight:700':'color:var(--muted)')+'">'+(enRetard?'⏰ retour en retard (prévu le ':'retour prévu le ')+fmtDate(m.dateRetourPrevue)+(enRetard?')':'')+'</span>';
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">'+
+      '<span>🧰 <strong>'+esc(m.ref||'')+'</strong> — '+esc(m.nom)+(m.detenuPar?(' · pris par '+esc(m.detenuPar)):'')+retourInfo+'</span>'+
+      '<button type="button" class="btn btn-ghost btn-sm" onclick="rendreMaterielSuivi('+m.id+')">↩️ Rendre</button></div>';
+  }).join('');
+}
+
+function ouvrirScanMaterielSuivi(){
+  document.getElementById('suivi-materiel-scan-zone').style.display='block';
+  document.getElementById('suivi-materiel-code-zone').style.display='none';
+  document.getElementById('suivi-materiel-resultat').innerHTML='';
+  if(typeof Html5Qrcode==='undefined'){
+    document.getElementById('suivi-materiel-scan-zone').innerHTML='<p style="color:var(--danger);font-size:12px">Lecteur QR indisponible (connexion internet requise). Utilisez "Saisir un code".</p>';
+    return;
+  }
+  document.getElementById('suivi-materiel-scan-zone').innerHTML='<div id="suivi-materiel-reader" style="width:100%;max-width:280px"></div>';
+  html5QrScannerSuivi=new Html5Qrcode('suivi-materiel-reader');
+  html5QrScannerSuivi.start(
+    {facingMode:'environment'},
+    {fps:10,qrbox:200},
+    function(decodedText){
+      html5QrScannerSuivi.stop().then(function(){
+        traiterMaterielScanneSuivi(decodedText);
+      }).catch(function(){traiterMaterielScanneSuivi(decodedText);});
+    },
+    function(){/* pas de QR sur cette frame, ignorer */}
+  ).catch(function(){
+    document.getElementById('suivi-materiel-scan-zone').innerHTML='<p style="color:var(--danger);font-size:12px">Impossible d\'accéder à la caméra. Utilisez "Saisir un code".</p>';
+  });
+}
+
+function basculerCodeMaterielSuivi(){
+  if(html5QrScannerSuivi){html5QrScannerSuivi.stop().catch(function(){});html5QrScannerSuivi=null;}
+  document.getElementById('suivi-materiel-scan-zone').style.display='none';
+  document.getElementById('suivi-materiel-scan-zone').innerHTML='';
+  document.getElementById('suivi-materiel-code-zone').style.display='block';
+  document.getElementById('suivi-materiel-resultat').innerHTML='';
+  document.getElementById('suivi-materiel-code-saisie').value='';
+  setTimeout(function(){document.getElementById('suivi-materiel-code-saisie').focus();},50);
+}
+
+function validerCodeMaterielSuivi(){
+  var saisie=document.getElementById('suivi-materiel-code-saisie').value.trim();
+  if(!saisie){alert('Entrez une référence, un nom ou un n° de série.');return;}
+  var m=trouverMaterielParCodeAgenda(saisie);
+  if(!m){
+    document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:var(--danger)">Aucun outil trouvé pour "'+esc(saisie)+'".</p>';
+    return;
+  }
+  attribuerMaterielAuChantier(m.id);
+}
+
+function traiterMaterielScanneSuivi(decodedText){
+  var match=/^NICO-MATERIEL:(\d+)$/.exec(decodedText||'');
+  if(!match){
+    document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:var(--danger)">Ce QR ne correspond pas à un outil NICO MULTISERVICES.</p>';
+    return;
+  }
+  attribuerMaterielAuChantier(parseInt(match[1],10));
+}
+
+function attribuerMaterielAuChantier(materielId){
+  if(!suiviEvId)return;
+  var m=(db.materiel||[]).find(function(x){return x.id===materielId;});
+  if(!m){
+    document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:var(--danger)">Outil introuvable.</p>';
+    return;
+  }
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  if(!ev)return;
+  var personne=document.getElementById('suivi-materiel-employe').value;
+  if(!personne){
+    document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:var(--danger)">Sélectionnez le salarié qui prend cet outil avant de scanner.</p>';
+    return;
+  }
+
+  if(m.detenuPar&&m.detenuPar!==personne){
+    document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:#92400E">⚠️ '+esc(m.ref||m.nom)+' est déjà pris par '+esc(m.detenuPar)+'.</p>';
+    return;
+  }
+
+  m.detenuPar=personne;
+  var dateRetourPrevueEl=document.getElementById('suivi-materiel-date-retour');
+  var dateRetourPrevue=dateRetourPrevueEl?dateRetourPrevueEl.value:'';
+  m.dateRetourPrevue=dateRetourPrevue||'';
+  var mvt={type:'prise',date:todayStr(),chantier:ev.titre||'',evenementId:ev.id,personne:personne,dateRendu:null,dateRetourPrevue:dateRetourPrevue||''};
+  m.dernierMouvement=mvt;
+  if(!m.historique)m.historique=[];
+  m.historique.push(mvt);
+
+  pushMateriel();
+  traceEvent('materiel_pris',personne+' a pris '+(m.ref?m.ref+' — ':'')+m.nom+' pour '+(ev.titre||'le chantier')+(dateRetourPrevue?' (retour prévu le '+fmtDate(dateRetourPrevue)+')':''));
+  document.getElementById('suivi-materiel-resultat').innerHTML='<p style="color:#15803D">✅ '+esc(m.ref||'')+' — '+esc(m.nom)+' ajouté au chantier.</p>';
+  renderMaterielSuivi(ev);
+  if(html5QrScannerSuivi){html5QrScannerSuivi.stop().catch(function(){});html5QrScannerSuivi=null;}
+  document.getElementById('suivi-materiel-scan-zone').style.display='none';
+  document.getElementById('suivi-materiel-scan-zone').innerHTML='';
+  document.getElementById('suivi-materiel-code-zone').style.display='none';
+}
+
+var editMtraId=null;
+function rendreMaterielSuivi(materielId){
+  var m=(db.materiel||[]).find(function(x){return x.id===materielId;});if(!m)return;
+  editMtraId=materielId;
+  document.getElementById('mtra-nom').textContent=(m.ref?m.ref+' — ':'')+m.nom;
+  document.getElementById('mtra-etat').value='bon';
+  document.getElementById('mtra-commentaire').value='';
+  openModal('modal-retour-materiel-agenda');
+}
+
+function confirmerRetourMaterielSuivi(){
+  if(!editMtraId)return;
+  var m=(db.materiel||[]).find(function(x){return x.id===editMtraId;});if(!m)return;
+  var etat=document.getElementById('mtra-etat').value;
+  var commentaire=document.getElementById('mtra-commentaire').value.trim();
+  if(!m.historique)m.historique=[];
+  for(var i=m.historique.length-1;i>=0;i--){
+    if(m.historique[i].type==='prise'&&!m.historique[i].dateRendu){
+      m.historique[i].dateRendu=todayStr();
+      m.historique[i].etatRetour=etat||'';
+      m.historique[i].commentaireRetour=commentaire||'';
+      break;
+    }
+  }
+  m.detenuPar=null;
+  m.dateRetourPrevue='';
+  m.dernierEtat=etat||'';
+  pushMateriel();
+  if(etat==='a_reparer'||etat==='perdu'){
+    traceEvent('materiel_'+(etat==='perdu'?'perdu':'a_reparer'),(m.ref?m.ref+' — ':'')+m.nom+(commentaire?' : '+commentaire:''));
+  }
+  closeModal('modal-retour-materiel-agenda');
+  editMtraId=null;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  if(ev)renderMaterielSuivi(ev);
+}
+function ajouterPointageEvenement(){
+  if(!suiviEvId)return;
+  var employe=document.getElementById('suivi-pointage-employe').value;
+  var date=document.getElementById('suivi-pointage-date').value;
+  var heures=document.getElementById('suivi-pointage-heures').value;
+  if(!employe){alert('Sélectionnez un employé.');return;}
+  if(!date){alert('Indiquez une date.');return;}
+  if(!heures||parseFloat(heures)<=0){alert('Indiquez un nombre d\'heures valide.');return;}
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  if(!db.events[i].pointagesHeures)db.events[i].pointagesHeures=[];
+  db.events[i].pointagesHeures.push({employe:employe,date:date,heures:parseFloat(heures)});
+  pushEvents();
+  traceEvent('pointage_chantier',db.events[i].titre+' — '+employe+' ('+heures+'h)');
+  document.getElementById('suivi-pointage-heures').value='';
+  renderPointagesListe(db.events[i]);
+}
+function supprimerPointageEvenement(idx){
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  db.events[i].pointagesHeures.splice(idx,1);
+  pushEvents();
+  renderPointagesListe(db.events[i]);
+}
+function enregistrerRapportChantier(){
+  if(!suiviEvId)return;
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  db.events[i].rapport=document.getElementById('suivi-rapport').value;
+  pushEvents();
+  traceEvent('rapport_chantier',db.events[i].titre);
+  alert('Rapport enregistré.');
+}
+
+// ═══ RAPPORT DE FIN DE CHANTIER (PDF) : heures pointees, outils reellement pris (via
+// l'historique du materiel suivi, pas juste la checklist), photos avant/apres (liens
+// Google Drive), et le compte-rendu libre. Complementaire au rapport deja disponible
+// depuis gestion-devis-factures.html (genererRapportChantierGDF), avec en plus le detail
+// des outils et les liens photos. ═══
+function genererRapportFinChantierAgenda(){
+  if(!suiviEvId){alert('Aucun chantier sélectionné.');return;}
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  if(!ev)return;
+  // Sauvegarde d'abord le rapport en cours de saisie, pour etre sur qu'il soit inclus
+  enregistrerRapportChantierSilencieux();
+
+  var c=ev.clientId?clientById(ev.clientId):null;
+  var adresse=ev.lieu||(c?[c.adresse,c.codePostal,c.ville].filter(Boolean).join(' '):'');
+  var pointages=(ev.pointagesHeures||[]).slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  var totalParEmploye={};var totalGeneral=0;
+  pointages.forEach(function(p){var h=parseFloat(p.heures)||0;totalParEmploye[p.employe||'—']=(totalParEmploye[p.employe||'—']||0)+h;totalGeneral+=h;});
+  var outilsUtilises=(db.materiel||[]).filter(function(m){
+    return (m.historique||[]).some(function(h){return String(h.evenementId)===String(ev.id);});
+  });
+  var photos=ev.photos||[];
+
+  var pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+  var y=18;
+  pdf.setFontSize(15);pdf.setFont(undefined,'bold');
+  pdf.text('Rapport de fin de chantier — '+(ev.titre||''),14,y);y+=6;
+  pdf.setFontSize(9.5);pdf.setFont(undefined,'normal');pdf.setTextColor(120);
+  pdf.text('Généré le '+new Date().toLocaleDateString('fr-FR'),14,y);y+=8;
+  pdf.setTextColor(20);pdf.setFontSize(10.5);
+  pdf.setFont(undefined,'bold');pdf.text('Client :',14,y);pdf.setFont(undefined,'normal');pdf.text(c?(c.nom||''):'—',35,y);y+=6;
+  pdf.setFont(undefined,'bold');pdf.text('Adresse :',14,y);pdf.setFont(undefined,'normal');pdf.text(adresse||'—',35,y);y+=6;
+  pdf.setFont(undefined,'bold');pdf.text('Date(s) :',14,y);pdf.setFont(undefined,'normal');pdf.text((ev.start||'—')+(ev.end&&ev.end!==ev.start?' → '+ev.end:''),35,y);y+=6;
+  pdf.setFont(undefined,'bold');pdf.text('Statut :',14,y);pdf.setFont(undefined,'normal');pdf.text(({'a-faire':'À faire','en-cours':'En cours','termine':'Terminé'})[ev.statut]||ev.statut||'—',35,y);y+=10;
+
+  pdf.setFont(undefined,'bold');pdf.setFontSize(12);pdf.text('Heures travaillées',14,y);y+=4;
+  if(pointages.length&&window.jspdf.jsPDF.API.autoTable){
+    pdf.autoTable({
+      startY:y,margin:{left:14,right:14},
+      head:[['Employé','Date','Heures']],
+      body:pointages.map(function(p){return [p.employe||'—',p.date||'—',(p.heures||0)+' h'];}),
+      styles:{fontSize:9.5},headStyles:{fillColor:[241,245,249],textColor:20}
+    });
+    y=pdf.lastAutoTable.finalY+6;
+    pdf.setFontSize(10);
+    Object.keys(totalParEmploye).forEach(function(n){pdf.setFont(undefined,'bold');pdf.text(n+' : '+totalParEmploye[n]+' h',14,y);y+=5;});
+    pdf.setFont(undefined,'bold');pdf.text('Total général : '+totalGeneral+' h',14,y);y+=8;
+  }else{
+    y+=6;pdf.setFont(undefined,'normal');pdf.setFontSize(10);pdf.text('Aucun pointage enregistré.',14,y);y+=8;
+  }
+
+  if(y>240){pdf.addPage();y=18;}
+  pdf.setFont(undefined,'bold');pdf.setFontSize(12);pdf.text('Outils pris sur ce chantier',14,y);y+=4;
+  if(outilsUtilises.length&&window.jspdf.jsPDF.API.autoTable){
+    pdf.autoTable({
+      startY:y,margin:{left:14,right:14},
+      head:[['Outil','Pris par','Retour']],
+      body:outilsUtilises.map(function(m){
+        var mvt=(m.historique||[]).slice().reverse().find(function(h){return String(h.evenementId)===String(ev.id);});
+        return [(m.ref?m.ref+' — ':'')+m.nom,(mvt&&mvt.personne)||'—',(mvt&&mvt.dateRendu)?('rendu le '+mvt.dateRendu):(m.detenuPar?'toujours en cours':'—')];
+      }),
+      styles:{fontSize:9.5},headStyles:{fillColor:[241,245,249],textColor:20}
+    });
+    y=pdf.lastAutoTable.finalY+8;
+  }else{
+    y+=6;pdf.setFont(undefined,'normal');pdf.setFontSize(10);pdf.text('Aucun outil suivi enregistré pour ce chantier.',14,y);y+=8;
+  }
+
+  if(y>250){pdf.addPage();y=18;}
+  pdf.setFont(undefined,'bold');pdf.setFontSize(12);pdf.text('Photos avant / après',14,y);y+=6;
+  pdf.setFont(undefined,'normal');pdf.setFontSize(9.5);pdf.setTextColor(26,86,219);
+  if(!photos.length){
+    pdf.setTextColor(20);pdf.text('Aucune photo envoyée.',14,y);y+=8;
+  }else{
+    photos.forEach(function(p){
+      if(y>280){pdf.addPage();y=18;}
+      var label=(p.type==='avant'?'⏮️ Avant — ':'⏭️ Après — ')+'lien Google Drive';
+      pdf.textWithLink(label,14,y,{url:p.lienDrive});
+      y+=6;
+    });
+    y+=4;
+  }
+
+  pdf.setTextColor(20);
+  if(y>240){pdf.addPage();y=18;}
+  pdf.setFont(undefined,'bold');pdf.setFontSize(12);pdf.text('Compte-rendu',14,y);y+=6;
+  pdf.setFont(undefined,'normal');pdf.setFontSize(10);
+  var rapportLines=pdf.splitTextToSize(ev.rapport||'—',180);
+  pdf.text(rapportLines,14,y);
+
+  pdf.save('Rapport_fin_chantier_'+(ev.titre||'chantier').replace(/[^a-z0-9]+/gi,'_')+'.pdf');
+  traceEvent('rapport_fin_chantier_pdf',ev.titre);
+}
+
+// Variante sans alerte, utilisee juste avant la generation du PDF pour capturer la
+// derniere saisie du champ "Rapport de fin de chantier" sans interrompre le clic.
+function enregistrerRapportChantierSilencieux(){
+  if(!suiviEvId)return;
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  db.events[i].rapport=document.getElementById('suivi-rapport').value;
+  pushEvents();
+}
+
+// ═══ ITINERAIRE GPS : ouvre Google Maps en mode "itineraire" vers l'adresse du chantier
+// depuis la position actuelle de l'ouvrier (fonctionne aussi bien sur mobile, ouvre
+// l'appli Maps installee si disponible). ═══
+function ouvrirItineraireChantier(){
+  if(!suiviEvId)return;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  if(!ev||!ev.lieu){alert('Aucune adresse renseignée pour ce chantier.');return;}
+  var url='https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(ev.lieu)+'&travelmode=driving';
+  window.open(url,'_blank');
+}
+
+// ═══ POINTAGE RAPIDE 1-CLIC AVEC GEOLOCALISATION : au lieu de saisir manuellement le
+// nombre d'heures, l'ouvrier clique "Arrivée" en arrivant sur le chantier (position GPS
+// enregistree), puis "Départ" en partant — les heures sont calculees automatiquement et
+// ajoutees a ev.pointagesHeures (meme structure que la saisie manuelle, avec en plus
+// l'heure precise et la position pour tracabilite). Stocke temporairement l'etat "en cours
+// de pointage" sur l'evenement lui-meme (ev.pointagesActifs), synchronise comme le reste. ═══
+function majAffichagePointageRapide(){
+  if(!suiviEvId)return;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  if(!ev)return;
+  var employe=document.getElementById('pointage-rapide-employe').value;
+  var actif=(ev.pointagesActifs||{})[employe];
+  var statutEl=document.getElementById('pointage-rapide-statut');
+  if(actif){
+    document.getElementById('btn-pointage-arrivee').style.display='none';
+    document.getElementById('btn-pointage-depart').style.display='inline-flex';
+    var heureDebut=new Date(actif.debut).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    statutEl.textContent='🟢 Pointage en cours depuis '+heureDebut+(actif.geo?' (position enregistrée)':' (position non disponible)');
+  }else{
+    document.getElementById('btn-pointage-arrivee').style.display='inline-flex';
+    document.getElementById('btn-pointage-depart').style.display='none';
+    statutEl.textContent='';
+  }
+}
+
+function pointerArriveeRapide(){
+  if(!suiviEvId)return;
+  var employe=document.getElementById('pointage-rapide-employe').value;
+  if(!employe){alert('Sélectionnez d\'abord votre nom.');return;}
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  var enregistrer=function(geo){
+    if(!db.events[i].pointagesActifs)db.events[i].pointagesActifs={};
+    db.events[i].pointagesActifs[employe]={debut:new Date().toISOString(),geo:geo};
+    pushEvents();
+    traceEvent('pointage_arrivee',employe+' — '+db.events[i].titre);
+    majAffichagePointageRapide();
+  };
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      function(pos){enregistrer({lat:pos.coords.latitude,lng:pos.coords.longitude});},
+      function(){enregistrer(null);}, // position refusee/indisponible : on pointe quand meme
+      {timeout:8000}
+    );
+  }else{enregistrer(null);}
+}
+
+function pointerDepartRapide(){
+  if(!suiviEvId)return;
+  var employe=document.getElementById('pointage-rapide-employe').value;
+  var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+  if(i===-1)return;
+  var actif=(db.events[i].pointagesActifs||{})[employe];
+  if(!actif){alert('Aucun pointage d\'arrivée en cours pour cet employé.');return;}
+  var finaliser=function(geoFin){
+    var debut=new Date(actif.debut);
+    var fin=new Date();
+    var heures=Math.round(((fin-debut)/3600000)*4)/4; // arrondi au quart d'heure
+    if(heures<=0)heures=0.25;
+    if(!db.events[i].pointagesHeures)db.events[i].pointagesHeures=[];
+    db.events[i].pointagesHeures.push({
+      employe:employe,date:todayStr(),heures:heures,
+      heureArrivee:debut.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      heureDepart:fin.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      geoArrivee:actif.geo||null,geoDepart:geoFin||null
+    });
+    delete db.events[i].pointagesActifs[employe];
+    pushEvents();
+    traceEvent('pointage_depart',employe+' — '+heures+' h — '+db.events[i].titre);
+    renderPointagesListe(db.events[i]);
+    majAffichagePointageRapide();
+  };
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(
+      function(pos){finaliser({lat:pos.coords.latitude,lng:pos.coords.longitude});},
+      function(){finaliser(null);},
+      {timeout:8000}
+    );
+  }else{finaliser(null);}
+}
+
+// ═══ RAPPEL CHANTIER DU LENDEMAIN : a l'ouverture de l'appli, si l'ouvrier connecte a un
+// chantier prevu demain, une bannière le rappelle. Ce n'est pas une vraie notification push
+// (cela demanderait Firebase Cloud Messaging + une fonction planifiee côté serveur, non
+// presents dans cette appli) — le rappel s'affiche donc a la prochaine ouverture de
+// l'appli, ce qui couvre la majorite des usages (on ouvre son agenda chaque matin). ═══
+function afficherRappelChantierDemain(){
+  var el=document.getElementById('rappel-chantier-demain');
+  if(!el)return;
+  var demain=addDays(todayStr(),1);
+  var nomOuvrier=_salarieConnecteAgenda?_salarieConnecteAgenda.nom:null;
+  var chantiersDemain=(db.events||[]).filter(function(e){
+    if(e.type!=='chantier')return false;
+    if(!(e.start<=demain&&(e.end||e.start)>=demain))return false;
+    if(nomOuvrier&&e.equipe&&e.equipe.length)return e.equipe.indexOf(nomOuvrier)!==-1;
+    return true; // pas d'equipe assignee ou utilisateur non reconnu comme salarie : on affiche quand meme
+  });
+  if(!chantiersDemain.length){el.innerHTML='';return;}
+  var lignes=chantiersDemain.map(function(e){return esc(e.titre)+(e.lieu?' — '+esc(e.lieu):'');}).join(' · ');
+  el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;margin:0 0 14px 0">'+
+    '<span style="font-size:13px;color:#1D4ED8">📅 Demain : '+lignes+'</span>'+
+  '</div>';
+}
+
+// ═══ SIGNALEMENT D'INCIDENT : accessible depuis le bouton d'en-tete, a tout moment.
+// Enregistre dans Firestore ("incidentsChantier") pour etre visible cote administrateur
+// (dashboard.html peut ecouter cette collection pour les faire apparaitre en alerte). ═══
+function openModalIncident(){
+  var sel=document.getElementById('incident-chantier');
+  var chantiersEnCours=(db.events||[]).filter(function(e){return e.type==='chantier';}).sort(function(a,b){return (b.start||'').localeCompare(a.start||'');}).slice(0,30);
+  sel.innerHTML='<option value="">— Aucun / autre —</option>'+chantiersEnCours.map(function(e){return '<option value="'+e.id+'">'+esc(e.titre)+' ('+fmtDate(e.start)+')</option>';}).join('');
+  document.getElementById('incident-gravite').value='attention';
+  document.getElementById('incident-description').value='';
+  openModal('modal-incident');
+}
+
+function envoyerSignalementIncident(){
+  var description=document.getElementById('incident-description').value.trim();
+  if(!description){alert('Merci de décrire le problème.');return;}
+  var chantierId=document.getElementById('incident-chantier').value;
+  var chantier=chantierId?(db.events||[]).find(function(e){return String(e.id)===String(chantierId);}):null;
+  var payload={
+    description:description,
+    gravite:document.getElementById('incident-gravite').value,
+    chantierId:chantierId||null,
+    chantierTitre:chantier?chantier.titre:null,
+    personne:(_salarieConnecteAgenda&&_salarieConnecteAgenda.nom)||(fbUser&&fbUser.email)||'Inconnu',
+    statut:'nouveau',
+    date:firebase.firestore.FieldValue.serverTimestamp(),
+    compte:DOC_ACTIF
+  };
+  fbDb.collection('incidentsChantier').add(payload).then(function(){
+    traceEvent('incident_signale',payload.personne+' — '+(payload.chantierTitre||'sans chantier')+' — '+payload.gravite);
+    closeModal('modal-incident');
+    alert('✅ Problème signalé. L\'administrateur en sera informé.');
+  }).catch(function(e){
+    console.error('Erreur envoi incident:',e);
+    alert('⚠️ Erreur lors de l\'envoi. Vérifiez votre connexion et réessayez.');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CARNET DE BORD VEHICULES : kilometrage, revision, controle technique.
+// Meme principe d'alerte que pour le materiel soumis a controle periodique.
+// Stocke dans db.vehicules[], synchronise via pushVehicules().
+// ═══════════════════════════════════════════════════════════════════════
+var editVehId=null;
+
+function openModalVehicules(){
+  editVehId=null;
+  annulerEditionVehicule();
+  renderVehiculesListe();
+  openModal('modal-vehicules');
+}
+
+function renderVehiculesListe(){
+  var el=document.getElementById('vehicules-liste');
+  var liste=(db.vehicules||[]).slice().sort(function(a,b){return (a.nom||'').localeCompare(b.nom||'');});
+  if(!liste.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">Aucun véhicule enregistré.</div>';return;}
+  var today=todayStr();
+  el.innerHTML=liste.map(function(v){
+    var alerteCT='';
+    if(v.controleTechnique){
+      var jours=Math.round((new Date(v.controleTechnique)-new Date(today))/86400000);
+      if(jours<0)alerteCT=' <span class="badge" style="background:#FEE2E2;color:#B91C1C">🔴 CT dépassé</span>';
+      else if(jours<=30)alerteCT=' <span class="badge" style="background:#FEF3C7;color:#92400E">🟠 CT dans '+jours+' j</span>';
+    }
+    var alerteRevision='';
+    if(v.kmRevision&&v.km&&(v.kmRevision-v.km)<=1000)alerteRevision=' <span class="badge" style="background:#FEF3C7;color:#92400E">🟠 Révision proche</span>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">'+
+      '<span><strong>'+esc(v.nom||'')+'</strong>'+(v.immat?' — '+esc(v.immat):'')+' · '+(v.km?v.km.toLocaleString('fr-FR')+' km':'km non renseigné')+alerteCT+alerteRevision+'</span>'+
+      '<span style="display:flex;gap:6px">'+
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="editerVehicule('+v.id+')">✏️</button>'+
+        '<button type="button" class="btn btn-ghost btn-sm" onclick="supprimerVehicule('+v.id+')">🗑️</button>'+
+      '</span></div>';
+  }).join('');
+}
+
+function editerVehicule(id){
+  var v=(db.vehicules||[]).find(function(x){return x.id===id;});
+  if(!v)return;
+  editVehId=id;
+  document.getElementById('veh-edit-id').value=id;
+  document.getElementById('veh-nom').value=v.nom||'';
+  document.getElementById('veh-immat').value=v.immat||'';
+  document.getElementById('veh-km').value=v.km||'';
+  document.getElementById('veh-km-revision').value=v.kmRevision||'';
+  document.getElementById('veh-controle-technique').value=v.controleTechnique||'';
+  document.getElementById('veh-notes').value=v.notes||'';
+  document.getElementById('vehicule-form-titre').textContent='Modifier le véhicule';
+  document.getElementById('veh-btn-annuler').style.display='inline-flex';
+}
+
+function annulerEditionVehicule(){
+  editVehId=null;
+  document.getElementById('veh-edit-id').value='';
+  document.getElementById('veh-nom').value='';
+  document.getElementById('veh-immat').value='';
+  document.getElementById('veh-km').value='';
+  document.getElementById('veh-km-revision').value='';
+  document.getElementById('veh-controle-technique').value='';
+  document.getElementById('veh-notes').value='';
+  document.getElementById('vehicule-form-titre').textContent='Ajouter un véhicule';
+  document.getElementById('veh-btn-annuler').style.display='none';
+}
+
+function saveVehicule(){
+  var nom=document.getElementById('veh-nom').value.trim();
+  if(!nom){alert('Le nom du véhicule est obligatoire.');return;}
+  var obj={
+    nom:nom,
+    immat:document.getElementById('veh-immat').value.trim(),
+    km:parseInt(document.getElementById('veh-km').value,10)||0,
+    kmRevision:parseInt(document.getElementById('veh-km-revision').value,10)||null,
+    controleTechnique:document.getElementById('veh-controle-technique').value||'',
+    notes:document.getElementById('veh-notes').value.trim()
+  };
+  if(!db.vehicules)db.vehicules=[];
+  if(editVehId){
+    var i=db.vehicules.findIndex(function(x){return x.id===editVehId;});
+    db.vehicules[i]=Object.assign({},db.vehicules[i],obj);
+  }else{
+    obj.id=Date.now();
+    db.vehicules.push(obj);
+  }
+  pushVehicules();
+  annulerEditionVehicule();
+  renderVehiculesListe();
+  renderAlerteVehicules();
+}
+
+function supprimerVehicule(id){
+  if(!confirm('Supprimer ce véhicule du carnet de bord ?'))return;
+  db.vehicules=(db.vehicules||[]).filter(function(x){return x.id!==id;});
+  pushVehicules();
+  renderVehiculesListe();
+  renderAlerteVehicules();
+}
+
+function renderAlerteVehicules(){
+  var badge=document.getElementById('nav-vehicule-badge');
+  var el=document.getElementById('vehicules-alerte');
+  var today=todayStr();
+  var concernes=(db.vehicules||[]).filter(function(v){
+    var ctProche=v.controleTechnique&&Math.round((new Date(v.controleTechnique)-new Date(today))/86400000)<=30;
+    var revisionProche=v.kmRevision&&v.km&&(v.kmRevision-v.km)<=1000;
+    return ctProche||revisionProche;
+  });
+  if(badge){
+    if(concernes.length){badge.style.display='inline-block';badge.textContent=concernes.length;}
+    else badge.style.display='none';
+  }
+  if(!el)return;
+  if(!concernes.length){el.innerHTML='';return;}
+  var lignes=concernes.map(function(v){
+    var motifs=[];
+    if(v.controleTechnique){
+      var jours=Math.round((new Date(v.controleTechnique)-new Date(today))/86400000);
+      motifs.push(jours<0?('CT dépassé de '+Math.abs(jours)+' j'):('CT dans '+jours+' j'));
+    }
+    if(v.kmRevision&&v.km&&(v.kmRevision-v.km)<=1000)motifs.push('révision proche ('+(v.kmRevision-v.km)+' km restants)');
+    return esc(v.nom)+' ('+motifs.join(', ')+')';
+  }).join(' · ');
+  el.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;margin:0 0 14px 0">'+
+    '<span style="font-size:13px;color:#92400E">🚐⏰ '+concernes.length+' véhicule(s) à surveiller : '+lignes+'</span>'+
+    '<button class="btn btn-ghost btn-sm" onclick="openModalVehicules()">Voir</button>'+
+  '</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BROUILLONS DE DEVIS : simples notes (client + objet + notes libres) prises sur le
+// terrain, stockees dans db.brouillonsDevis[] — un tableau totalement separe de
+// db.documents (les vrais devis/factures) et jamais touche par publierDocumentPublic.
+// Le client ne peut donc JAMAIS les voir : ce ne sont pas des documents, juste des
+// pense-betes. La transformation en devis reel se fait cote gestion-devis-factures.html.
+// ═══════════════════════════════════════════════════════════════════════
+var editBrouillonId=null;
+
+function openModalBrouillonsDevis(){
+  var sel=document.getElementById('brouillon-client');
+  sel.innerHTML='<option value="">-- Aucun / à préciser --</option>'+(db.clients||[]).map(function(c){return '<option value="'+c.id+'">'+esc(c.nom)+'</option>';}).join('');
+  annulerEditionBrouillon();
+  renderBrouillonsDevisListe();
+  openModal('modal-brouillons-devis');
+}
+
+// Ouvre le meme modal, pre-rempli avec le client du chantier en cours de suivi — pratique
+// pour noter "il faudrait un devis pour X" directement depuis le suivi de l'intervention.
+function creerBrouillonDepuisChantier(){
+  if(!suiviEvId)return;
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+  closeModal('modal-suivi');
+  openModalBrouillonsDevis();
+  if(ev&&ev.clientId)document.getElementById('brouillon-client').value=ev.clientId;
+  if(ev)document.getElementById('brouillon-notes').value='Vu lors du chantier "'+ev.titre+'" du '+fmtDate(ev.start)+'.\n';
+  document.getElementById('brouillon-notes').focus();
+}
+
+function renderBrouillonsDevisListe(){
+  var el=document.getElementById('brouillons-devis-liste');
+  var liste=(db.brouillonsDevis||[]).slice().sort(function(a,b){return (b.dateCreation||'').localeCompare(a.dateCreation||'');});
+  if(!liste.length){el.innerHTML='<div style="font-size:12px;color:var(--muted)">Aucun brouillon pour le moment.</div>';return;}
+  el.innerHTML=liste.map(function(b){
+    var c=b.clientId?clientById(b.clientId):null;
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+        '<div><strong>'+esc(b.objet||'(sans objet)')+'</strong>'+(c?' — '+esc(c.nom):'')+'<div style="color:var(--muted);font-size:11px">Noté le '+fmtDate(b.dateCreation)+'</div></div>'+
+        '<span style="display:flex;gap:6px;flex-shrink:0">'+
+          '<button type="button" class="btn btn-ghost btn-sm" onclick="editerBrouillonDevis('+b.id+')">✏️</button>'+
+          '<button type="button" class="btn btn-ghost btn-sm" onclick="supprimerBrouillonDevis('+b.id+')">🗑️</button>'+
+        '</span>'+
+      '</div>'+
+      (b.notes?'<div style="white-space:pre-wrap;margin-top:4px;color:#374151">'+esc(b.notes)+'</div>':'')+
+    '</div>';
+  }).join('');
+}
+
+function editerBrouillonDevis(id){
+  var b=(db.brouillonsDevis||[]).find(function(x){return x.id===id;});
+  if(!b)return;
+  editBrouillonId=id;
+  document.getElementById('brouillon-edit-id').value=id;
+  document.getElementById('brouillon-client').value=b.clientId||'';
+  document.getElementById('brouillon-objet').value=b.objet||'';
+  document.getElementById('brouillon-notes').value=b.notes||'';
+  document.getElementById('brouillon-form-titre').textContent='Modifier le brouillon';
+  document.getElementById('brouillon-btn-annuler').style.display='inline-flex';
+}
+
+function annulerEditionBrouillon(){
+  editBrouillonId=null;
+  document.getElementById('brouillon-edit-id').value='';
+  document.getElementById('brouillon-client').value='';
+  document.getElementById('brouillon-objet').value='';
+  document.getElementById('brouillon-notes').value='';
+  document.getElementById('brouillon-form-titre').textContent='Nouveau brouillon';
+  document.getElementById('brouillon-btn-annuler').style.display='none';
+}
+
+function saveBrouillonDevis(){
+  var objet=document.getElementById('brouillon-objet').value.trim();
+  var notes=document.getElementById('brouillon-notes').value.trim();
+  if(!objet&&!notes){alert('Renseignez au moins un objet ou une note.');return;}
+  var obj={
+    clientId:document.getElementById('brouillon-client').value||null,
+    objet:objet,
+    notes:notes
+  };
+  if(!db.brouillonsDevis)db.brouillonsDevis=[];
+  if(editBrouillonId){
+    var i=db.brouillonsDevis.findIndex(function(x){return x.id===editBrouillonId;});
+    db.brouillonsDevis[i]=Object.assign({},db.brouillonsDevis[i],obj);
+  }else{
+    obj.id=Date.now();
+    obj.dateCreation=todayStr();
+    db.brouillonsDevis.push(obj);
+  }
+  pushBrouillonsDevis();
+  annulerEditionBrouillon();
+  renderBrouillonsDevisListe();
+  majBadgeBrouillonsDevis();
+}
+
+function supprimerBrouillonDevis(id){
+  if(!confirm('Supprimer ce brouillon ?'))return;
+  db.brouillonsDevis=(db.brouillonsDevis||[]).filter(function(x){return x.id!==id;});
+  pushBrouillonsDevis();
+  renderBrouillonsDevisListe();
+  majBadgeBrouillonsDevis();
+}
+
+function majBadgeBrouillonsDevis(){
+  var badge=document.getElementById('nav-brouillon-badge');
+  if(!badge)return;
+  var nb=(db.brouillonsDevis||[]).length;
+  if(nb){badge.style.display='inline-block';badge.textContent=nb;}
+  else badge.style.display='none';
+}
+
+
+// ═══ NOTES "PROCHAIN RDV" EN ATTENTE : liste les chantiers Termines qui ont une note pour
+// le prochain rendez-vous, mais pour lesquels aucune nouvelle intervention n'est encore
+// planifiee a la meme adresse — pour ne pas oublier de les reprogrammer. ═══
+function renderNotesRdvEnAttente(){
+  var el=document.getElementById('notes-rdv-attente-alerte');
+  if(!el)return;
+  var today=todayStr();
+  var enAttente=(db.events||[]).filter(function(e){
+    if(e.statut!=='termine'||!e.noteProchainRdv||!e.lieu)return false;
+    var lieuNorm=normaliserAdresse(e.lieu);
+    var dejaPlanifie=(db.events||[]).some(function(f){
+      return f.id!==e.id&&f.lieu&&normaliserAdresse(f.lieu)===lieuNorm&&f.start>=today;
+    });
+    return !dejaPlanifie;
+  });
+  if(!enAttente.length){el.innerHTML='';return;}
+  var lignes=enAttente.map(function(e){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0">'+
+      '<span>📌 <strong>'+esc(e.titre)+'</strong> — '+esc(e.noteProchainRdv)+'</span>'+
+      '<button type="button" class="btn btn-ghost btn-sm" onclick="planifierProchainRdv('+e.id+')">+ Planifier</button></div>';
+  }).join('');
+  el.innerHTML='<div style="padding:12px 16px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;margin:0 0 14px 0">'+
+    '<div style="font-size:13px;color:#1D4ED8;font-weight:700;margin-bottom:4px">📌 '+enAttente.length+' prochain(s) rendez-vous à planifier</div>'+
+    lignes+
+  '</div>';
+}
+
+// Ouvre le formulaire de nouvel evenement pre-rempli avec le client, l'adresse et la note
+// laissee lors de la cloture du chantier precedent, pour planifier la suite en 1 geste.
+function planifierProchainRdv(eventId){
+  var ev=(db.events||[]).find(function(x){return String(x.id)===String(eventId);});
+  if(!ev)return;
+  openEventModal(null);
+  document.getElementById('ev-titre').value=ev.titre.replace(/^\s*Suite\s*[—-]\s*/,'')+' — suite';
+  document.getElementById('ev-client').value=ev.clientId||'';
+  document.getElementById('ev-lieu').value=ev.lieu||'';
+  document.getElementById('ev-notes').value=ev.noteProchainRdv;
+  renderHistoriqueAdresse();
+}
+
+function renderPhotosListe(ev){
+  var el=document.getElementById('suivi-photos-liste');
+  var liste=ev.photos||[];
+  if(!liste.length){el.innerHTML='<div style="font-size:11.5px;color:var(--muted)">Aucune photo envoyée.</div>';return;}
+  el.innerHTML=liste.map(function(p){
+    return '<a href="'+esc(p.lienDrive)+'" target="_blank" rel="noopener" style="display:flex;flex-direction:column;align-items:center;font-size:10.5px;color:var(--muted);text-decoration:none;width:70px">'+
+      '<div style="width:60px;height:60px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px">'+(p.type==='avant'?'⏮️':'⏭️')+'</div>'+
+      '<span style="margin-top:4px">'+(p.type==='avant'?'Avant':'Après')+'</span></a>';
+  }).join('');
+}
+
+// ═══ GOOGLE DRIVE — PHOTOS CHANTIER (compte/dossier separe de l'archivage compta) ═══
+var GOOGLE_DRIVE_PHOTOS_CONFIG={
+  clientId:'702834434238-58rha78icpd9hjl9u2b9629nu0ap9b9p.apps.googleusercontent.com'
+};
+var PHOTOS_GDRIVE_CONNECTED_KEY='nico_agenda_gdrive_connected';
+var photosTokenClient=null,photosAccessToken=null,photosTokenExpiryMs=0,photosTokenPendingCallback=null;
+function gdrivePhotosEnsureToken(callback,forcerConsentement){
+  if(photosAccessToken&&Date.now()<photosTokenExpiryMs-30000){callback(photosAccessToken);return;}
+  if(!window.google||!google.accounts||!google.accounts.oauth2){callback(null);return;}
+  if(!photosTokenClient){
+    photosTokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:GOOGLE_DRIVE_PHOTOS_CONFIG.clientId,
+      scope:'https://www.googleapis.com/auth/drive.file',
+      callback:function(resp){
+        var cb=photosTokenPendingCallback;photosTokenPendingCallback=null;
+        if(resp&&resp.access_token){
+          photosAccessToken=resp.access_token;
+          photosTokenExpiryMs=Date.now()+(resp.expires_in||3600)*1000;
+          try{localStorage.setItem(PHOTOS_GDRIVE_CONNECTED_KEY,'1');}catch(e){}
+          if(cb)cb(photosAccessToken);
+        }else{if(cb)cb(null);}
+      }
+    });
+  }
+  photosTokenPendingCallback=callback;
+  var dejaAutorise=false;
+  try{dejaAutorise=localStorage.getItem(PHOTOS_GDRIVE_CONNECTED_KEY)==='1';}catch(e){}
+  photosTokenClient.requestAccessToken({prompt:(forcerConsentement||!dejaAutorise)?'consent':''});
+}
+function gdrivePhotosConnecter(){
+  var el=document.getElementById('suivi-gdrive-statut');
+  el.textContent='Connexion en cours…';
+  gdrivePhotosEnsureToken(function(token){
+    el.textContent=token?'✓ Connecté à Google Drive':'Échec de connexion.';
+    el.style.color=token?'var(--accent)':'var(--danger)';
+  },true);
+}
+function gdrivePhotosTenterReconnexionAutomatique(){
+  var dejaAutorise=false;
+  try{dejaAutorise=localStorage.getItem(PHOTOS_GDRIVE_CONNECTED_KEY)==='1';}catch(e){}
+  var el=document.getElementById('suivi-gdrive-statut');
+  if(!dejaAutorise){if(el){el.textContent='Non connecté à Google Drive.';el.style.color='var(--muted)';}return;}
+  gdrivePhotosEnsureToken(function(token){
+    if(el){el.textContent=token?'✓ Connecté à Google Drive':'Reconnexion impossible — cliquez sur "Connecter Google Drive".';el.style.color=token?'var(--accent)':'var(--muted)';}
+  });
+}
+function gdrivePhotosTrouverOuCreerDossier(nom,parentId,token){
+  var q="mimeType='application/vnd.google-apps.folder' and name='"+nom.replace(/'/g,"\\'")+"' and trashed=false"+(parentId?" and '"+parentId+"' in parents":"");
+  return fetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)',{headers:{Authorization:'Bearer '+token}})
+    .then(function(r){return r.json();}).then(function(data){
+      if(data.files&&data.files.length)return data.files[0].id;
+      var metadata={name:nom,mimeType:'application/vnd.google-apps.folder'};
+      if(parentId)metadata.parents=[parentId];
+      return fetch('https://www.googleapis.com/drive/v3/files',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(metadata)})
+        .then(function(r){return r.json();}).then(function(created){return created.id;});
+    });
+}
+function gdrivePhotosUploaderFichier(nomFichier,blob,dossierId,token){
+  var metadata={name:nomFichier,parents:[dossierId]};
+  var form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
+  form.append('file',blob,nomFichier);
+  return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{Authorization:'Bearer '+token},body:form})
+    .then(function(r){return r.json();});
+}
+function uploaderPhotoChantier(inputEl,type){
+  var fichier=inputEl.files[0];
+  if(!fichier||!suiviEvId)return;
+  var progEl=document.getElementById('suivi-photos-progression');
+  progEl.textContent='Connexion à Google Drive…';
+  gdrivePhotosEnsureToken(function(token){
+    if(!token){progEl.textContent='';alert('Connexion à Google Drive impossible. Cliquez sur "Connecter Google Drive" puis réessayez.');return;}
+    var ev=(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);});
+    var nomDossierChantier=(ev.titre||'Chantier').replace(/[\\/:*?"<>|]/g,'_')+'_'+(ev.start||'');
+    progEl.textContent='Envoi de la photo…';
+    gdrivePhotosTrouverOuCreerDossier('Photos chantiers NICO MULTISERVICES',null,token).then(function(dossierRacine){
+      return gdrivePhotosTrouverOuCreerDossier(nomDossierChantier,dossierRacine,token);
+    }).then(function(dossierChantier){
+      var d=new Date();
+      var nomFichier=type+'_'+d.toISOString().replace(/[:.]/g,'-')+'_'+fichier.name;
+      return gdrivePhotosUploaderFichier(nomFichier,fichier,dossierChantier,token);
+    }).then(function(res){
+      var i=(db.events||[]).findIndex(function(x){return String(x.id)===String(suiviEvId);});
+      if(i===-1)return;
+      if(!db.events[i].photos)db.events[i].photos=[];
+      db.events[i].photos.push({type:type,lienDrive:res.webViewLink||('https://drive.google.com/file/d/'+res.id+'/view'),date:todayStr()});
+      pushEvents();
+      traceEvent('photo_chantier',db.events[i].titre+' — '+type);
+      progEl.textContent='✓ Photo envoyée.';
+      renderPhotosListe(db.events[i]);
+      inputEl.value='';
+    }).catch(function(e){
+      console.error('Erreur envoi photo Drive:',e);
+      progEl.textContent='Erreur lors de l\'envoi : '+e.message;
+    });
+  },false);
+}
+
+// ═══ MODAL FICHE CONTACT ═══
+function openContactModal(clientId){
+  var c=clientById(clientId);
+  if(!c)return;
+  document.getElementById('cc-title').textContent=c.nom||'Client';
+  var rows=[
+    ['Type',c.typeClient==='pro'?'Professionnel':'Particulier'],
+    ['Contact',c.contact||'—'],
+    ['Téléphone',c.tel||'—'],
+    ['Email',c.email||'—'],
+    ['Adresse',[c.adresse,c.cp,c.ville].filter(Boolean).join(' ')||'—']
+  ];
+  if(c.siret)rows.push(['SIRET',c.siret]);
+  document.getElementById('cc-info').innerHTML=rows.map(function(r){return '<div class="cc-row"><span>'+esc(r[0])+'</span><span>'+esc(r[1])+'</span></div>';}).join('');
+  var actions=[];
+  if(c.tel)actions.push('<a class="btn btn-accent btn-sm" href="tel:'+esc(c.tel.replace(/\s/g,''))+'">📞 Appeler</a>');
+  if(c.tel)actions.push('<a class="btn btn-ghost btn-sm" href="sms:'+esc(c.tel.replace(/\s/g,''))+'">💬 SMS</a>');
+  if(c.email)actions.push('<a class="btn btn-ghost btn-sm" href="mailto:'+esc(c.email)+'">✉️ Email</a>');
+  var addrFull=[c.adresse,c.cp,c.ville].filter(Boolean).join(' ');
+  if(addrFull)actions.push('<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(addrFull)+'">📍 Itinéraire</a>');
+  document.getElementById('cc-actions').innerHTML=actions.join('');
+  var docs=docsForClient(c.id);
+  document.getElementById('cc-docs').innerHTML=docs.length?docs.map(function(d){
+    return '<div class="doc-row"><span>'+(d.type==='devis'?'📋':'💶')+' <strong>'+esc(d.numero)+'</strong> · '+fmtDate(d.date)+(d.objet?' · '+esc(d.objet):'')+'</span><span><strong>'+fmt(d.totalHT)+' €</strong> <span class="badge '+statutClass(d.statut)+'">'+esc(d.statut||'')+'</span></span></div>';
+  }).join(''):'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun devis ni facture pour ce client.</div>';
+  openModal('modal-contact');
+}
+
+document.getElementById('day-picker').value=todayStr();
+</script>
+<!-- MODAL BIENVENUE PREMIERE CONNEXION -->
+<div class="modal-overlay" id="welcome-modal-agenda">
+  <div class="modal">
+    <div class="modal-header"><h2>👋 Bienvenue sur l'Agenda chantier</h2><button class="close-btn" onclick="fermerWelcomeModalAgenda()">✕</button></div>
+    <div class="modal-body" style="padding:18px 22px">
+      <div style="font-size:13.5px;line-height:1.6">
+        <p style="margin-bottom:12px">Cette application vous accompagne sur le terrain. Voici l'essentiel :</p>
+        <div style="background:var(--bg,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+          <div style="font-weight:700;margin-bottom:4px">📅 Planning</div>
+          <div style="color:var(--muted)">Consultez vos interventions du jour et de la semaine, avec l'adresse et l'équipe assignée.</div>
+        </div>
+        <div style="background:var(--bg,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+          <div style="font-weight:700;margin-bottom:4px">⏱ Pointage d'heures</div>
+          <div style="color:var(--muted)">Sur chaque chantier, ouvrez "Suivi" pour saisir vos heures travaillées — elles remontent automatiquement dans la paie.</div>
+        </div>
+        <p style="font-size:12px;color:var(--muted)">Toutes les données sont synchronisées en direct avec les autres applications.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="width:100%" onclick="fermerWelcomeModalAgenda()">J'ai compris, commencer</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
