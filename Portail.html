@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portail — NICO MULTISERVICES</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0;
+  --text:#1F2937; --muted:#6B7280; --primary:#1A56DB; --primary-dark:#1543AD;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:48px 20px;
+  background-size:cover; background-position:center; background-attachment:fixed;
+}
+body.avec-fond-perso::before{
+  content:''; position:fixed; inset:0; background:rgba(241,245,249,.82); z-index:-1;
+}
+.coordonnees-bandeau{
+  position:fixed; top:0; left:0; right:0; background:rgba(17,24,39,.92); color:#fff;
+  font-size:13px; padding:8px 16px; text-align:center; z-index:100; letter-spacing:.02em;
+}
+.coordonnees-bandeau a{color:#fff;text-decoration:none;}
+.coordonnees-bandeau span{margin:0 10px;}
+.brand{text-align:center;margin-bottom:36px;}
+.brand h1{font-size:26px;font-weight:800;color:var(--text);margin-bottom:4px;}
+.brand p{font-size:13.5px;color:var(--muted);}
+.grille{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:18px; width:100%; max-width:960px;
+}
+.tuile{
+  background:var(--card); border:1px solid var(--border); border-radius:14px;
+  padding:26px 16px; text-align:center; text-decoration:none; color:var(--text);
+  transition:transform .15s ease, box-shadow .15s ease; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:10px; position:relative;
+}
+.tuile .etat-dot{
+  position:absolute; top:12px; right:12px; width:9px; height:9px; border-radius:50%;
+  background:#22C55E; box-shadow:0 0 0 3px rgba(34,197,94,.15);
+}
+.tuile .etat-dot.maintenance{background:#EF4444; box-shadow:0 0 0 3px rgba(239,68,68,.15);}
+.tuile .etat-detail{font-size:11px;color:#B91C1C;font-weight:600;margin-top:-4px;text-align:center;line-height:1.4;}
+.tuile:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.08); border-color:var(--primary);}
+.tuile .ic{font-size:34px;}
+.tuile .lbl{font-size:14px; font-weight:700;}
+.vide{color:var(--muted); font-size:14px; text-align:center; margin-top:40px; max-width:420px; line-height:1.6;}
+.loading{color:var(--muted); font-size:13.5px; margin-top:30px;}
+.footer{margin-top:44px; font-size:11.5px; color:var(--muted); text-align:center;}
+
+/* ═══ ESPACE EMPLOYE : bouton de connexion, modal, et panneau personnalise ═══ */
+.compte-zone{position:fixed; top:14px; right:16px; z-index:90; display:flex; align-items:center; gap:8px;}
+.btn-connexion{
+  background:var(--primary); color:#fff; border:none; border-radius:8px; padding:8px 16px;
+  font-size:13px; font-weight:600; cursor:pointer;
+}
+.btn-connexion:hover{background:var(--primary-dark);}
+.compte-badge{
+  background:var(--card); border:1px solid var(--border); border-radius:8px; padding:7px 14px;
+  font-size:13px; display:flex; align-items:center; gap:10px;
+}
+.compte-badge button{background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; text-decoration:underline;}
+
+.modal-overlay-p{display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:200; align-items:center; justify-content:center; padding:16px;}
+.modal-overlay-p.open{display:flex;}
+.modal-box-p{background:#fff; border-radius:14px; padding:24px; max-width:420px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,.25);}
+.modal-box-p h3{font-size:16px; font-weight:800; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;}
+.modal-box-p .close-x{background:none; border:none; font-size:18px; cursor:pointer; color:var(--muted);}
+.fg-p{margin-bottom:12px;}
+.fg-p label{display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:600;}
+.fg-p input,.fg-p select,.fg-p textarea{
+  width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:8px; font-size:13.5px; font-family:inherit;
+}
+.err-p{color:#DC2626; font-size:12.5px; margin-top:6px; display:none;}
+.err-p.show{display:block;}
+
+.mon-espace{width:100%; max-width:960px; margin:0 0 28px;}
+.mon-espace-carte{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px 22px; margin-bottom:14px;}
+.mon-espace-carte h2{font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
+.mon-espace-chantier{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:13.5px;}
+.mon-espace-chantier:last-child{border-bottom:none;}
+.mon-espace-vide{color:var(--muted); font-size:13px;}
+.demande-liste-item{padding:6px 0; border-bottom:1px solid var(--border); font-size:12.5px;}
+</style>
+</head>
+<body>
+
+  <div class="coordonnees-bandeau" id="coordonnees-bandeau" style="display:none"></div>
+
+  <div class="compte-zone">
+    <button class="btn-connexion" id="btn-ouvrir-connexion" onclick="ouvrirModalConnexion()">🔐 Se connecter</button>
+    <div class="compte-badge" id="compte-badge" style="display:none">
+      <span id="compte-badge-nom">👤</span>
+      <button onclick="deconnexionPortail()">Se déconnecter</button>
+    </div>
+  </div>
+
+  <div class="brand">
+    <h1>🔗 Portail NICO MULTISERVICES</h1>
+    <p>Accès rapide à toutes les applications de l'entreprise</p>
+  </div>
+
+  <!-- MON ESPACE : visible uniquement une fois connecte — mes chantiers + mes documents -->
+  <div class="mon-espace" id="mon-espace" style="display:none">
+    <div class="mon-espace-carte">
+      <h2>👋 Bonjour <span id="mon-espace-prenom"></span></h2>
+      <h2 style="margin-top:16px">🔨 Mes chantiers</h2>
+      <div id="mon-espace-chantiers"><div class="mon-espace-vide">Chargement…</div></div>
+    </div>
+    <div class="mon-espace-carte">
+      <h2>📄 Mes documents</h2>
+      <div class="fg-p"><label>Type de document</label>
+        <select id="md-type">
+          <option value="attestation_travail">Attestation de travail</option>
+          <option value="bulletin_paie">Bulletin de paie</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+      <div class="fg-p"><label>Période concernée (optionnel)</label><input id="md-periode" placeholder="Ex : mars 2026"></div>
+      <div class="fg-p"><label>Précisions</label><textarea id="md-commentaire" rows="2" placeholder="Toute information utile"></textarea></div>
+      <button class="btn-connexion" onclick="envoyerDemandeDocumentPortail()">Envoyer la demande</button>
+      <div id="md-statut" style="font-size:12.5px;margin-top:8px"></div>
+      <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px">
+        <h2 style="font-size:13px">Mes demandes précédentes</h2>
+        <div id="md-mes-demandes" style="margin-top:8px">Chargement…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="loading" id="loading-msg">Chargement des applications…</div>
+  <div class="grille" id="grille" style="display:none"></div>
+  <div class="vide" id="vide-msg" style="display:none">Aucun bouton configuré pour le moment. Ajoutez-en depuis le Centre de monitoring (dashboard) — section « 🔗 Portail applications ».</div>
+
+  <div class="footer">Les boutons de cette page se configurent depuis le Centre de monitoring.</div>
+
+  <!-- MODAL CONNEXION -->
+  <div class="modal-overlay-p" id="modal-connexion">
+    <div class="modal-box-p">
+      <h3><span>🔐 Se connecter</span><button class="close-x" onclick="fermerModalConnexion()">✕</button></h3>
+      <div class="fg-p"><label>Email</label><input type="email" id="co-email" placeholder="vous@exemple.fr"></div>
+      <div class="fg-p"><label>Mot de passe</label><input type="password" id="co-password" placeholder="••••••••"></div>
+      <div class="err-p" id="co-err"></div>
+      <button class="btn-connexion" style="width:100%;margin-top:6px" onclick="connexionPortail()">Se connecter</button>
+    </div>
+  </div>
+
+<script>
+var FIREBASE_CONFIG={
+  apiKey:"AIzaSyCg6ZhR0-LYxynuuABQNc1RMqu2E8IaFc4",
+  authDomain:"facturedevis-2684d.firebaseapp.com",
+  projectId:"facturedevis-2684d",
+  storageBucket:"facturedevis-2684d.firebasestorage.app",
+  messagingSenderId:"702834434238",
+  appId:"1:702834434238:web:03650c40921bbe61577eef"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+var fbDb=firebase.firestore();
+var fbAuth=firebase.auth();
+var DOC_PARTAGE_UID='V61nytHZpuVvDh72Ra4ClFy2bJg1'; // identifiant reel de l'entreprise — ne JAMAIS modifier
+
+// ═══ COORDONNEES ENTREPRISE EN PERMANENCE : lit siteConfig/coordonnees, un document PUBLIC
+// (lecture sans connexion) publie automatiquement par gestion-devis-factures.html a chaque
+// sauvegarde des Parametres. On ne peut PAS lire directement la collection 'users' depuis
+// ici : elle contient toute la base de l'entreprise et reste volontairement privee (reservee
+// aux comptes connectes) — c'est pour ça qu'un document public dedie a ete cree. ═══
+fbDb.collection('siteConfig').doc('coordonnees').onSnapshot(function(doc){
+  if(!doc.exists)return;
+  var p=doc.data();
+  var bandeau=document.getElementById('coordonnees-bandeau');
+  var morceaux=[];
+  if(p.tel)morceaux.push('☎ <a href="tel:'+esc(p.tel)+'">'+esc(p.tel)+'</a>');
+  if(p.adresse)morceaux.push('📍 '+esc(p.adresse)+(p.ville?(', '+esc(p.ville)):''));
+  if(p.email)morceaux.push('✉ <a href="mailto:'+esc(p.email)+'">'+esc(p.email)+'</a>');
+  if(!morceaux.length){bandeau.style.display='none';document.body.style.paddingTop='';return;}
+  bandeau.innerHTML=morceaux.join('<span>·</span>');
+  bandeau.style.display='block';
+  document.body.style.paddingTop='52px';
+},function(e){console.error('Erreur chargement coordonnées entreprise:',e);});
+
+// ═══ FOND D'ECRAN PERSONNALISABLE : image configuree depuis le dashboard (URL stockee dans
+// siteConfig/portail.fondEcranUrl). Un voile semi-transparent est applique par-dessus pour
+// garder les tuiles lisibles quel que soit le visuel choisi. ═══
+fbDb.collection('siteConfig').doc('portail').onSnapshot(function(doc){
+  var url=doc.exists?doc.data().fondEcranUrl:'';
+  var mode=doc.exists?(doc.data().fondEcranMode||'cover'):'cover';
+  if(url){
+    // Verifie que l'image se charge reellement avant de l'appliquer (les liens Google Drive
+    // en particulier echouent souvent silencieusement pour cet usage) — sinon on garde le
+    // fond par defaut plutot que d'afficher un ecran casse sans aucune indication.
+    var test=new Image();
+    test.onload=function(){
+      document.body.style.backgroundImage="url('"+url.replace(/'/g,"\\'")+"')";
+      document.body.style.backgroundSize=(mode==='stretch')?'100% 100%':mode;
+      document.body.style.backgroundRepeat='no-repeat';
+      document.body.classList.add('avec-fond-perso');
+    };
+    test.onerror=function(){
+      console.error('Fond d\'écran : image introuvable ou inaccessible :',url);
+      document.body.style.backgroundImage='';
+      document.body.classList.remove('avec-fond-perso');
+    };
+    test.src=url;
+  }else{
+    document.body.style.backgroundImage='';
+    document.body.classList.remove('avec-fond-perso');
+  }
+},function(e){console.error('Erreur chargement fond d\'écran:',e);});
+
+
+function esc(s){return(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ═══ INDICATEUR D'ETAT EN DIRECT : ecoute les memes documents Firestore que les autres
+// applis utilisent pour se mettre elles-memes en maintenance, et affiche le detail (message
+// + depuis quand) sous chaque tuile concernee. Chaque appli a son propre champ :
+// - gestion-devis-factures.html -> siteConfig/main.maintenanceAppActive
+// - agenda-chantier.html        -> siteConfig/main.maintenanceAgendaActive
+// - compta.html                 -> siteConfig/comptaMaintenance.actif
+// - consultation.html           -> siteConfig/main.modeMaintenance / blocageConsultation
+// - dashboard.html / portail.html ne sont jamais mis en maintenance. ═══
+var _etatApp={actif:false,message:'',depuis:null};
+var _etatAgenda={actif:false,message:'',depuis:null};
+var _etatCompta={actif:false,message:'',depuis:null};
+var _etatConsultation={actif:false,message:'',depuis:null};
+
+function toDateJs(ts){return ts&&ts.toDate?ts.toDate():null;}
+
+fbDb.collection('siteConfig').doc('main').onSnapshot(function(doc){
+  var cfg=doc.exists?doc.data():{};
+  var expireeApp=cfg.maintenanceAppExpiration&&new Date(cfg.maintenanceAppExpiration)<new Date();
+  _etatApp={actif:!!cfg.maintenanceAppActive&&!expireeApp,message:cfg.maintenanceAppMessage||'',depuis:toDateJs(cfg.maintenanceAppDepuis)};
+  var expireeAgenda=cfg.maintenanceAgendaExpiration&&new Date(cfg.maintenanceAgendaExpiration)<new Date();
+  _etatAgenda={actif:!!cfg.maintenanceAgendaActive&&!expireeAgenda,message:cfg.maintenanceAgendaMessage||'',depuis:toDateJs(cfg.maintenanceAgendaDepuis)};
+  var expireeConsult=cfg.verrouillageExpiration&&new Date(cfg.verrouillageExpiration)<new Date();
+  var expireeMaint=cfg.maintenanceExpiration&&new Date(cfg.maintenanceExpiration)<new Date();
+  _etatConsultation={actif:(!!cfg.modeMaintenance&&!expireeMaint)||(!!cfg.blocageConsultation&&!expireeConsult),message:cfg.messageMaintenance||'',depuis:toDateJs(cfg.modeMaintenanceDepuis)};
+  rafraichirEtatsTuiles();
+},function(e){console.error('Erreur écoute maintenance principale:',e);});
+
+fbDb.collection('siteConfig').doc('comptaMaintenance').onSnapshot(function(doc){
+  var cfg=doc.exists?doc.data():{};
+  var expiree=cfg.expiration&&new Date(cfg.expiration)<new Date();
+  _etatCompta={actif:!!cfg.actif&&!expiree,message:cfg.message||'',depuis:toDateJs(cfg.depuis)};
+  rafraichirEtatsTuiles();
+},function(e){console.error('Erreur écoute maintenance compta:',e);});
+
+function etatPourUrl(url){
+  var u=(url||'').toLowerCase();
+  if(u.indexOf('compta')!==-1)return _etatCompta;
+  if(u.indexOf('agenda')!==-1)return _etatAgenda;
+  if(u.indexOf('consultation')!==-1)return _etatConsultation;
+  if(u.indexOf('dashboard')!==-1||u.indexOf('portail')!==-1)return {actif:false};
+  return _etatApp; // gestion-devis-factures.html et tout le reste par defaut
+}
+
+function formatDepuis(date){
+  if(!date)return '';
+  var auj=new Date();
+  var memeJour=date.toDateString()===auj.toDateString();
+  var heure=date.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  return memeJour?('depuis '+heure):('depuis le '+date.toLocaleDateString('fr-FR')+' '+heure);
+}
+
+function rafraichirEtatsTuiles(){
+  document.querySelectorAll('.tuile').forEach(function(t){
+    var dot=t.querySelector('.etat-dot');
+    var detailEl=t.querySelector('.etat-detail');
+    if(!dot)return;
+    var etat=etatPourUrl(t.getAttribute('href'));
+    dot.classList.toggle('maintenance',!!etat.actif);
+    if(etat.actif){
+      dot.title='En maintenance'+(etat.message?(' — '+etat.message):'');
+      if(detailEl)detailEl.textContent='🔧 En maintenance '+formatDepuis(etat.depuis);
+    }else{
+      dot.title='Opérationnel';
+      if(detailEl)detailEl.textContent='';
+    }
+  });
+}
+
+// Ecoute en temps reel : si un bouton est ajoute/modifie depuis le dashboard pendant que
+// cette page est ouverte sur un poste de l'entreprise, elle se met a jour automatiquement.
+fbDb.collection('portailBoutons').orderBy('ordre','asc').onSnapshot(function(snap){
+  document.getElementById('loading-msg').style.display='none';
+  var boutons=[];
+  snap.forEach(function(doc){boutons.push(Object.assign({id:doc.id},doc.data()));});
+  if(!boutons.length){
+    document.getElementById('vide-msg').style.display='block';
+    document.getElementById('grille').style.display='none';
+    return;
+  }
+  document.getElementById('vide-msg').style.display='none';
+  var grille=document.getElementById('grille');
+  grille.style.display='grid';
+  grille.innerHTML=boutons.map(function(b){
+    var url=esc(b.url||'#');
+    return '<a class="tuile" href="'+url+'" target="_blank" rel="noopener">'+
+      '<span class="etat-dot" title="Opérationnel"></span>'+
+      '<span class="ic">'+(b.icone||'🔗')+'</span>'+
+      '<span class="lbl">'+esc(b.label||'Sans nom')+'</span>'+
+      '<span class="etat-detail"></span>'+
+    '</a>';
+  }).join('');
+  rafraichirEtatsTuiles();
+},function(e){
+  console.error('Erreur chargement portail:',e);
+  document.getElementById('loading-msg').textContent='Erreur de chargement. Vérifiez votre connexion.';
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ESPACE EMPLOYE : connexion (comptes deja crees via dashboard.html > Identifiants &
+// bienvenue salaries), puis affichage personnalise (chantiers assignes + demande de
+// documents). Reutilise les collections deja existantes (users/{DOC_PARTAGE_UID} pour les
+// evenements, salaries pour le lien email->nom, demandesDocuments pour les demandes).
+// ═══════════════════════════════════════════════════════════════════════
+var _salarieConnectePortail=null;
+
+function ouvrirModalConnexion(){
+  document.getElementById('co-email').value='';
+  document.getElementById('co-password').value='';
+  document.getElementById('co-err').classList.remove('show');
+  document.getElementById('modal-connexion').classList.add('open');
+}
+function fermerModalConnexion(){document.getElementById('modal-connexion').classList.remove('open');}
+
+function connexionPortail(){
+  var email=document.getElementById('co-email').value.trim();
+  var pass=document.getElementById('co-password').value;
+  var errEl=document.getElementById('co-err');
+  errEl.classList.remove('show');
+  if(!email||!pass){errEl.textContent='Renseignez votre email et votre mot de passe.';errEl.classList.add('show');return;}
+  fbAuth.signInWithEmailAndPassword(email,pass).then(function(){
+    fermerModalConnexion();
+  }).catch(function(e){
+    errEl.textContent=(e.code==='auth/wrong-password'||e.code==='auth/user-not-found'||e.code==='auth/invalid-credential')?'Email ou mot de passe incorrect.':'Erreur de connexion : '+e.message;
+    errEl.classList.add('show');
+  });
+}
+
+function deconnexionPortail(){fbAuth.signOut();}
+
+fbAuth.onAuthStateChanged(function(user){
+  if(user){
+    document.getElementById('btn-ouvrir-connexion').style.display='none';
+    document.getElementById('compte-badge').style.display='flex';
+    document.getElementById('mon-espace').style.display='block';
+    chargerIdentitePortail(user);
+  }else{
+    document.getElementById('btn-ouvrir-connexion').style.display='inline-block';
+    document.getElementById('compte-badge').style.display='none';
+    document.getElementById('mon-espace').style.display='none';
+    _salarieConnectePortail=null;
+  }
+});
+
+function chargerIdentitePortail(user){
+  fbDb.collection('salaries').where('email','==',user.email).limit(1).get().then(function(snap){
+    _salarieConnectePortail=snap.empty?{nom:user.email,email:user.email}:Object.assign({},snap.docs[0].data());
+    var prenom=_salarieConnectePortail.prenom||(_salarieConnectePortail.nom||'').split(' ')[0]||user.email;
+    document.getElementById('compte-badge-nom').textContent='👤 '+prenom;
+    document.getElementById('mon-espace-prenom').textContent=prenom;
+    chargerMesChantiersPortail();
+    chargerMesDemandesPortail();
+  }).catch(function(e){console.error('Erreur chargement identité:',e);});
+}
+
+// Mes chantiers : lit users/{DOC_PARTAGE_UID}.db.events (accessible car authentifie), filtre
+// ceux dont l'equipe contient le nom du salarie connecte, du jour jusqu'a 14 jours devant.
+function chargerMesChantiersPortail(){
+  var el=document.getElementById('mon-espace-chantiers');
+  fbDb.collection('users').doc(DOC_PARTAGE_UID).get().then(function(doc){
+    if(!doc.exists||!doc.data().db){el.innerHTML='<div class="mon-espace-vide">Aucune donnée disponible.</div>';return;}
+    var events=doc.data().db.events||[];
+    var today=new Date().toISOString().split('T')[0];
+    var dansDeuxSemaines=new Date();dansDeuxSemaines.setDate(dansDeuxSemaines.getDate()+14);
+    var maxDate=dansDeuxSemaines.toISOString().split('T')[0];
+    var nom=_salarieConnectePortail.nom;
+    var mesChantiers=events.filter(function(e){
+      return e.type==='chantier'&&e.equipe&&e.equipe.indexOf(nom)!==-1&&(e.end||e.start)>=today&&e.start<=maxDate;
+    }).sort(function(a,b){return (a.start||'').localeCompare(b.start||'');});
+    if(!mesChantiers.length){el.innerHTML='<div class="mon-espace-vide">Aucun chantier assigné dans les 2 prochaines semaines.</div>';return;}
+    el.innerHTML=mesChantiers.map(function(e){
+      var estAujourdhui=e.start<=today&&(e.end||e.start)>=today;
+      return '<div class="mon-espace-chantier"><span>'+(estAujourdhui?'🔵 <strong>Aujourd\'hui</strong> — ':'📅 '+fmtDatePortail(e.start)+' — ')+esc(e.titre)+(e.lieu?' <span style="color:var(--muted)">('+esc(e.lieu)+')</span>':'')+'</span></div>';
+    }).join('');
+  }).catch(function(e){console.error('Erreur chargement chantiers:',e);el.innerHTML='<div class="mon-espace-vide">Erreur de chargement.</div>';});
+}
+
+function fmtDatePortail(d){if(!d)return'';var p=d.split('-');return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):d;}
+
+function envoyerDemandeDocumentPortail(){
+  var user=fbAuth.currentUser;
+  if(!user)return;
+  var payload={
+    demandeParUid:user.uid,demandeParEmail:user.email,
+    nomComplet:(_salarieConnectePortail&&(_salarieConnectePortail.prenom?_salarieConnectePortail.prenom+' ':'')+(_salarieConnectePortail.nom||''))||user.email,
+    type:document.getElementById('md-type').value,
+    periode:document.getElementById('md-periode').value.trim(),
+    commentaire:document.getElementById('md-commentaire').value.trim(),
+    statut:'nouvelle',
+    date:firebase.firestore.FieldValue.serverTimestamp()
+  };
+  var statutEl=document.getElementById('md-statut');
+  statutEl.style.color='';statutEl.textContent='Envoi en cours…';
+  fbDb.collection('demandesDocuments').add(payload).then(function(){
+    document.getElementById('md-periode').value='';
+    document.getElementById('md-commentaire').value='';
+    statutEl.style.color='#15803D';statutEl.textContent='✅ Demande envoyée.';
+    chargerMesDemandesPortail();
+  }).catch(function(e){
+    console.error('Erreur envoi demande:',e);
+    statutEl.style.color='#DC2626';statutEl.textContent='⚠️ Erreur lors de l\'envoi.';
+  });
+}
+
+function chargerMesDemandesPortail(){
+  var user=fbAuth.currentUser;
+  var el=document.getElementById('md-mes-demandes');
+  if(!user){el.innerHTML='';return;}
+  fbDb.collection('demandesDocuments').where('demandeParUid','==',user.uid).get().then(function(snap){
+    var liste=[];
+    snap.forEach(function(doc){liste.push(doc.data());});
+    liste.sort(function(a,b){
+      var da=a.date&&a.date.toDate?a.date.toDate():new Date(0);
+      var db2=b.date&&b.date.toDate?b.date.toDate():new Date(0);
+      return db2-da;
+    });
+    if(!liste.length){el.innerHTML='<div class="mon-espace-vide">Aucune demande envoyée.</div>';return;}
+    var typeLabel={attestation_travail:'Attestation de travail',bulletin_paie:'Bulletin de paie',autre:'Autre'};
+    var statutBadge={nouvelle:'🟠 En attente',traitee:'✅ Traitée'};
+    el.innerHTML=liste.map(function(d){
+      return '<div class="demande-liste-item">'+esc(typeLabel[d.type]||d.type)+(d.periode?(' — '+esc(d.periode)):'')+' — '+(statutBadge[d.statut]||statutBadge.nouvelle)+'</div>';
+    }).join('');
+  }).catch(function(e){console.error('Erreur chargement mes demandes:',e);});
+}
+</script>
+</body>
+</html>
