@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recherche — NICO MULTISERVICES</title>
+<style>
+:root{
+  --bg:#F1F5F9; --card:#FFFFFF; --border:#E2E8F0;
+  --text:#1F2937; --muted:#6B7280; --primary:#1A56DB; --primary-dark:#1543AD;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:44px 20px;
+}
+.brand{text-align:center;margin-bottom:28px;}
+.brand h1{font-size:24px;font-weight:800;margin-bottom:4px;}
+.brand p{font-size:13.5px;color:var(--muted);}
+.recherche-principale{width:100%;max-width:640px;display:flex;gap:8px;margin-bottom:36px;}
+.recherche-principale input{
+  flex:1;padding:14px 18px;border:1px solid var(--border);border-radius:12px;font-size:15px;
+  background:var(--card);
+}
+.recherche-principale button{
+  background:var(--primary);color:#fff;border:none;border-radius:12px;padding:0 24px;font-size:14px;font-weight:700;cursor:pointer;
+}
+.recherche-principale button:hover{background:var(--primary-dark);}
+.groupes{width:100%;max-width:900px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+.groupe{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
+.groupe h2{font-size:14px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.groupe .outils{display:flex;flex-direction:column;gap:6px;}
+.outil-btn{
+  display:flex;align-items:center;gap:8px;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-size:13px;cursor:pointer;text-align:left;color:var(--text);width:100%;
+}
+.outil-btn:hover{background:#EFF6FF;border-color:var(--primary);}
+.footer{margin-top:36px;font-size:11.5px;color:var(--muted);text-align:center;max-width:600px;}
+.retour{margin-bottom:18px;}
+.retour a{color:var(--primary);text-decoration:none;font-size:13px;font-weight:600;}
+</style>
+</head>
+<body>
+
+  <div class="retour"><a href="javascript:history.back()">← Retour</a></div>
+
+  <div class="brand">
+    <h1>🔎 Recherche NICO MULTISERVICES</h1>
+    <p>Raccourcis de recherche pensés pour le métier — fournisseurs, prix, normes, fiches techniques</p>
+  </div>
+
+  <div class="recherche-principale">
+    <input type="text" id="q-principale" placeholder="Tapez votre recherche…" onkeydown="if(event.key==='Enter')rechercher('google')">
+    <button onclick="rechercher('google')">Rechercher</button>
+  </div>
+
+  <div class="groupes">
+
+    <div class="groupe">
+      <h2>🧱 Matériaux & fournitures</h2>
+      <div class="outils">
+        <button class="outil-btn" onclick="rechercher('leroymerlin')">🏬 Chercher sur Leroy Merlin</button>
+        <button class="outil-btn" onclick="rechercher('pointp')">🏬 Chercher sur Point.P</button>
+        <button class="outil-btn" onclick="rechercher('cedeo')">🏬 Chercher sur Cedeo</button>
+        <button class="outil-btn" onclick="rechercher('prix')">💶 Comparer les prix (Google Shopping)</button>
+        <button class="outil-btn" onclick="rechercher('fiche')">📄 Trouver une fiche technique (PDF)</button>
+      </div>
+    </div>
+
+    <div class="groupe">
+      <h2>📐 Normes & réglementation</h2>
+      <div class="outils">
+        <button class="outil-btn" onclick="rechercher('dtu')">📘 Chercher une norme DTU</button>
+        <button class="outil-btn" onclick="rechercher('legifrance')">⚖️ Chercher sur Légifrance</button>
+        <button class="outil-btn" onclick="rechercher('service-public')">🏛️ Chercher sur Service-Public.fr</button>
+      </div>
+    </div>
+
+    <div class="groupe">
+      <h2>🗺️ Localisation & entreprises</h2>
+      <div class="outils">
+        <button class="outil-btn" onclick="rechercher('maps')">📍 Localiser une adresse (Maps)</button>
+        <button class="outil-btn" onclick="rechercher('itineraire')">🧭 Itinéraire depuis ici</button>
+        <button class="outil-btn" onclick="rechercher('societe')">🏢 Vérifier une entreprise / SIRET</button>
+        <button class="outil-btn" onclick="rechercher('avis')">⭐ Voir les avis d'une entreprise</button>
+      </div>
+    </div>
+
+    <div class="groupe">
+      <h2>🌐 Recherche générale</h2>
+      <div class="outils">
+        <button class="outil-btn" onclick="rechercher('google')">🔎 Recherche Google classique</button>
+        <button class="outil-btn" onclick="rechercher('images')">🖼️ Recherche d'images</button>
+        <button class="outil-btn" onclick="rechercher('youtube')">▶️ Tutoriel vidéo (YouTube)</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">Les recherches s'ouvrent dans un nouvel onglet, directement sur le site concerné. Aucune donnée n'est enregistrée ni transmise ailleurs.</div>
+
+<script>
+function rechercher(type){
+  var q=document.getElementById('q-principale').value.trim();
+  if(!q){alert('Tapez d\'abord ce que vous cherchez dans la barre en haut.');document.getElementById('q-principale').focus();return;}
+  var qEnc=encodeURIComponent(q);
+  var url='';
+  switch(type){
+    case 'google': url='https://www.google.com/search?q='+qEnc; break;
+    case 'images': url='https://www.google.com/search?tbm=isch&q='+qEnc; break;
+    case 'youtube': url='https://www.youtube.com/results?search_query='+qEnc; break;
+    case 'leroymerlin': url='https://www.leroymerlin.fr/recherche?query='+qEnc; break;
+    case 'pointp': url='https://www.pointp.fr/recherche?q='+qEnc; break;
+    case 'cedeo': url='https://www.cedeo.fr/recherche?q='+qEnc; break;
+    case 'prix': url='https://www.google.com/search?tbm=shop&q='+qEnc; break;
+    case 'fiche': url='https://www.google.com/search?q='+encodeURIComponent(q+' fiche technique filetype:pdf'); break;
+    case 'dtu': url='https://www.google.com/search?q='+encodeURIComponent('DTU '+q); break;
+    case 'legifrance': url='https://www.legifrance.gouv.fr/search/all?query='+qEnc; break;
+    case 'service-public': url='https://www.service-public.fr/recherche?keyword='+qEnc; break;
+    case 'maps': url='https://www.google.com/maps/search/'+qEnc; break;
+    case 'itineraire': url='https://www.google.com/maps/dir/?api=1&destination='+qEnc; break;
+    case 'societe': url='https://www.societe.com/cgi-bin/search?champs='+qEnc; break;
+    case 'avis': url='https://www.google.com/search?q='+encodeURIComponent(q+' avis')+'#lrd=0'; break;
+    default: url='https://www.google.com/search?q='+qEnc;
+  }
+  window.open(url,'_blank','noopener');
+}
+</script>
+</body>
+</html>
