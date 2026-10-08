@@ -20,6 +20,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <style>
 :root{
@@ -324,10 +325,14 @@ main{flex:1;min-width:0;}
 <div class="modal-overlay" id="modal-event">
   <div class="modal">
     <div class="modal-header"><h2 id="ev-modal-title">Nouveau chantier</h2><button class="close-btn" onclick="closeModal('modal-event')">✕</button></div>
+    <div id="ev-verrouille-bandeau" style="display:none;background:#FEF3C7;border-bottom:1px solid #FCD34D;padding:10px 22px;font-size:12.5px;color:#92400E;display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <span>🔒 Ce chantier est terminé et verrouillé pour éviter toute modification accidentelle.</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="deverrouillerEvenement()">🔓 Déverrouiller pour modifier</button>
+    </div>
     <div class="modal-body">
       <div class="g2">
         <div class="fg s2"><label>Titre *</label><input id="ev-titre" placeholder="Chantier Dupont — Peinture"></div>
-        <div class="fg s2"><label>Client</label><select id="ev-client"><option value="">-- Aucun --</option></select></div>
+        <div class="fg s2"><label>Client</label><select id="ev-client" onchange="renderSelectDocumentEvenement(this.value)"><option value="">-- Aucun --</option></select></div>
         <div class="fg"><label>Date début *</label><input type="date" id="ev-start"></div>
         <div class="fg"><label>Date fin</label><input type="date" id="ev-end"></div>
         <div class="fg"><label>Heure début</label><input type="time" id="ev-hstart" value="08:00"></div>
@@ -348,9 +353,14 @@ main{flex:1;min-width:0;}
           <label>📌 Note pour le prochain rendez-vous</label>
           <textarea id="ev-note-prochain-rdv" rows="2" placeholder="Ex : revenir dans 3 mois pour vérifier l'étanchéité, prévoir telle pièce, client absent le vendredi…"></textarea>
         </div>
+        <div class="fg s2"><label>Document lié (devis/facture)</label><select id="ev-document"><option value="">— Aucun —</option></select></div>
+        <div class="fg s2" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px">
+          <label style="color:#991B1B">⚠️ Consignes de sécurité pour ce chantier</label>
+          <textarea id="ev-consignes-securite" rows="2" placeholder="Ex : port du casque obligatoire, présence d'amiante repérée, accès électrique à couper avant intervention…"></textarea>
+        </div>
         <div class="fg"><label>Équipe assignée</label>
           <div id="ev-equipe-liste" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Gérer la liste d'équipe depuis l'onglet Équipe.</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Gérer la liste d'équipe depuis l'onglet Équipe. Toute personne nouvellement cochée recevra automatiquement un email avec les informations du chantier à l'enregistrement.</div>
         </div>
         <div class="fg s2"><label>Notes</label><textarea id="ev-notes"></textarea></div>
         <div class="fg s2"><label>Checklist matériel</label>
@@ -374,7 +384,7 @@ main{flex:1;min-width:0;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-event')">Annuler</button>
       <button id="ev-del-btn" class="btn btn-danger" style="display:none" onclick="deleteEvent()">🗑 Supprimer</button>
-      <button class="btn btn-primary" onclick="saveEvent()">💾 Enregistrer</button>
+      <button id="ev-save-btn" class="btn btn-primary" onclick="saveEvent()">💾 Enregistrer</button>
     </div>
   </div>
 </div>
@@ -388,6 +398,7 @@ main{flex:1;min-width:0;}
         <button type="button" class="btn btn-ghost btn-sm" id="suivi-btn-itineraire" onclick="ouvrirItineraireChantier()">🧭 Itinéraire vers ce chantier</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="afficherRappelMaterielARamener(suiviEvId)">🧰 Vérifier le matériel à ramener</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="creerBrouillonDepuisChantier()">📝 Noter un devis à faire</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="ouvrirGenerateurPanneauChantier()">🪧 Panneau de chantier</button>
       </div>
       <div class="fg s2" style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:10px">
         <label style="margin-bottom:6px">⏱️ Pointage rapide (avec géolocalisation)</label>
@@ -413,7 +424,7 @@ main{flex:1;min-width:0;}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
           <button type="button" class="btn btn-ghost btn-sm" onclick="ouvrirScanMaterielSuivi()">📷 Scanner un outil</button>
           <button type="button" class="btn btn-ghost btn-sm" onclick="basculerCodeMaterielSuivi()">⌨️ Saisir un code</button>
-          <div class="fg" style="margin:0;flex:1;min-width:140px"><label style="font-size:11px">Pris par</label><select id="suivi-materiel-employe" style="width:100%"></select></div>
+          <div class="fg" style="margin:0;flex:1;min-width:160px"><label style="font-size:11px">Pris par</label><div id="suivi-materiel-employe-affiche" style="padding:8px 10px;background:#F1F5F9;border-radius:8px;font-size:12.5px;font-weight:600"></div><input type="hidden" id="suivi-materiel-employe"></div>
           <div class="fg" style="margin:0;flex:1;min-width:140px"><label style="font-size:11px">Retour prévu le</label><input type="date" id="suivi-materiel-date-retour" style="width:100%"></div>
         </div>
         <div id="suivi-materiel-scan-zone" style="display:none;margin-top:8px"></div>
@@ -477,6 +488,26 @@ main{flex:1;min-width:0;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-incident')">Annuler</button>
       <button class="btn btn-primary" onclick="envoyerSignalementIncident()">🚨 Envoyer le signalement</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GENERATEUR DE PANNEAU DE CHANTIER : cree un panneau imprimable A4 (info travaux)
+     a afficher sur site, avec les coordonnees de l'entreprise et la nature des travaux. -->
+<div class="modal-overlay" id="modal-panneau-chantier">
+  <div class="modal">
+    <div class="modal-header"><h2>🪧 Panneau de chantier</h2><button class="close-btn" onclick="closeModal('modal-panneau-chantier')">✕</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>Nature des travaux</label><input id="pc-nature" placeholder="ex: Travaux de couverture"></div>
+      <div class="g2">
+        <div class="fg"><label>Début des travaux</label><input type="date" id="pc-date-debut"></div>
+        <div class="fg"><label>Fin prévue</label><input type="date" id="pc-date-fin"></div>
+      </div>
+      <div class="fg"><label>Message complémentaire (optionnel)</label><textarea id="pc-message" rows="2" placeholder="ex: Merci de votre compréhension pour la gêne occasionnée."></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-panneau-chantier')">Annuler</button>
+      <button class="btn btn-primary" onclick="genererPanneauChantierPDF()">📄 Générer le PDF à imprimer</button>
     </div>
   </div>
 </div>
@@ -637,6 +668,9 @@ function demanderCodeDeveloppeur(){
 }
 var fbApp=firebase.initializeApp(FIREBASE_CONFIG);
 var fbAuth=firebase.auth();
+// Isole la session de connexion a CETTE page uniquement (pas de partage automatique avec
+// gestion-devis-factures.html, dashboard.html, etc. meme ouverts dans un autre onglet).
+fbAuth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(function(e){console.error('Erreur configuration persistance session:',e);});
 var fbDb=firebase.firestore();
 var fbUser=null;
 var fbSyncUnsubscribe=null;
@@ -713,6 +747,15 @@ function tenterDeverrouillageAgenda(){
 function demarrerEcouteMaintenanceAgenda(){
   fbDb.collection('siteConfig').doc('main').onSnapshot(function(doc){
     var cfg=doc.exists?doc.data():{};
+
+    // ═══ INTERRUPTEUR "ETEINDRE LE SITE" : voir gestion-devis-factures.html pour le detail
+    // du fonctionnement. Page blanche pure, avant meme la logique de maintenance classique. ═══
+    if(cfg.sitesEteints&&cfg.sitesEteints.agenda){
+      document.documentElement.innerHTML='';
+      document.title='';
+      return;
+    }
+
     var expiree=cfg.maintenanceAgendaExpiration&&new Date(cfg.maintenanceAgendaExpiration)<new Date();
     var actif=!!cfg.maintenanceAgendaActive&&!expiree;
     maintenanceAgendaCodeAttendu=cfg.maintenanceAgendaCode||'';
@@ -814,10 +857,24 @@ function pushEquipeTerrain(){
 }
 // Pousse uniquement db.materiel — meme logique que pushEquipeTerrain, pour ne jamais
 // ecraser db.events en cours d'edition depuis un autre onglet/appareil.
+// Fusionne le materiel local avec celui actuellement sur le serveur AVANT de sauvegarder :
+// si un outil a ete ajoute depuis un autre onglet/appareil (gestion-devis-factures.html,
+// dashboard.html) et que cet onglet-ci ne l'a pas encore recu via son ecouteur temps reel,
+// une sauvegarde directe l'effacerait sinon purement et simplement (perte de donnees
+// silencieuse). On garde la version LOCALE pour les outils presents des deux cotes, et on
+// rajoute ceux qui n'existent QUE sur le serveur.
 function pushMateriel(){
   if(!fbUser)return;
-  fbDb.collection('users').doc(DOC_ACTIF).update({'db.materiel':db.materiel||[],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})
-    .catch(function(e){console.error('Erreur sauvegarde matériel:',e);});
+  fbDb.collection('users').doc(DOC_ACTIF).get().then(function(doc){
+    if(!db.materiel)db.materiel=[];
+    var materielServeur=(doc.exists&&doc.data().db&&doc.data().db.materiel)||[];
+    var localParId={};
+    db.materiel.forEach(function(m){localParId[m.id]=true;});
+    materielServeur.forEach(function(mServeur){
+      if(!localParId[mServeur.id])db.materiel.push(mServeur);
+    });
+    return fbDb.collection('users').doc(DOC_ACTIF).update({'db.materiel':db.materiel,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  }).catch(function(e){console.error('Erreur sauvegarde matériel:',e);});
 }
 // Pousse uniquement db.vehicules — meme logique que pushMateriel.
 function pushVehicules(){
@@ -1151,8 +1208,18 @@ function renderHistoriqueAdresse(){
   }).join('');
 }
 
+// Peuple le select "Document lié" avec les devis/factures du client selectionne — vide si
+// aucun client, remplace le contenu si le client change en cours de saisie.
+function renderSelectDocumentEvenement(clientId){
+  var sel=document.getElementById('ev-document');
+  if(!clientId){sel.innerHTML='<option value="">— Aucun —</option>';return;}
+  var docs=(db.documents||[]).filter(function(d){return d.clientId===clientId;}).sort(function(a,b){return (b.date||'').localeCompare(a.date||'');});
+  sel.innerHTML='<option value="">— Aucun —</option>'+docs.map(function(d){return '<option value="'+d.id+'">'+esc(d.numero)+' — '+esc(d.objet||'')+'</option>';}).join('');
+}
+
 function openEventModal(id,prefillDate){
   editEvId=id||null;
+  if(_deverrouillageTemporaireEvId!==editEvId)_deverrouillageTemporaireEvId=null;
   document.getElementById('ev-modal-title').textContent=editEvId?"Modifier l'événement":'Nouveau chantier';
   document.getElementById('ev-del-btn').style.display=editEvId?'inline-flex':'none';
   var sel=document.getElementById('ev-client');
@@ -1169,11 +1236,16 @@ function openEventModal(id,prefillDate){
     document.getElementById('ev-notes').value=ev.notes||'';
     document.getElementById('ev-statut').value=ev.statut||'a-faire';
     document.getElementById('ev-note-prochain-rdv').value=ev.noteProchainRdv||'';
+    document.getElementById('ev-consignes-securite').value=ev.consignesSecurite||'';
+    renderSelectDocumentEvenement(ev.clientId);
+    document.getElementById('ev-document').value=ev.documentId||'';
     materielFormulaireEnCours=(ev.materiel||[]).map(function(m){return {nom:m.nom,fait:!!m.fait};});
     renderEquipeCheckboxesEvenement(ev.equipe||[]);
     selEvType=ev.type||'chantier';
   }else{
     ['ev-titre','ev-lieu','ev-notes'].forEach(function(f){document.getElementById(f).value='';});
+    document.getElementById('ev-consignes-securite').value='';
+    renderSelectDocumentEvenement('');
     sel.value='';
     document.getElementById('ev-start').value=prefillDate||todayStr();
     document.getElementById('ev-end').value='';
@@ -1190,8 +1262,34 @@ function openEventModal(id,prefillDate){
   document.querySelectorAll('.ev-col-opt').forEach(function(el){el.classList.toggle('sel',el.getAttribute('data-type')===selEvType);});
   majAffichageNoteProchainRdv();
   renderHistoriqueAdresse();
+  appliquerVerrouillageEvenement();
   openModal('modal-event');
 }
+
+// ═══ VERROUILLAGE DES CHANTIERS TERMINES : une fois marque "Termine", un chantier ne doit
+// plus pouvoir etre modifie par erreur (titre, dates, equipe...). Un bouton explicite
+// "Deverrouiller" reste disponible pour corriger une erreur assumee. ═══
+function appliquerVerrouillageEvenement(){
+  var ev=editEvId?(db.events||[]).find(function(x){return String(x.id)===String(editEvId);}):null;
+  var verrouille=!!(ev&&ev.statut==='termine'&&!_deverrouillageTemporaireEvId);
+  document.getElementById('ev-verrouille-bandeau').style.display=verrouille?'flex':'none';
+  document.getElementById('ev-save-btn').style.display=verrouille?'none':'inline-flex';
+  document.getElementById('ev-del-btn').style.display=(editEvId&&!verrouille)?'inline-flex':'none';
+  var champs=['ev-titre','ev-client','ev-lieu','ev-note-prochain-rdv','ev-start','ev-end','ev-hstart','ev-hend','ev-statut','ev-notes'];
+  champs.forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=verrouille;});
+  document.querySelectorAll('.ev-col-opt').forEach(function(el){el.style.pointerEvents=verrouille?'none':'';el.style.opacity=verrouille?'.5':'';});
+}
+
+// Deverrouillage temporaire (le temps de cette ouverture de modal uniquement) pour corriger
+// un chantier termine par erreur. Redemande confirmation a chaque fois — le verrouillage
+// redevient actif des la prochaine ouverture du chantier.
+var _deverrouillageTemporaireEvId=null;
+function deverrouillerEvenement(){
+  if(!confirm('Déverrouiller ce chantier pour le modifier ? Il sera de nouveau verrouillé la prochaine fois que vous l\'ouvrirez.'))return;
+  _deverrouillageTemporaireEvId=editEvId;
+  appliquerVerrouillageEvenement();
+}
+
 function selEvType(el){
   selEvType=el.getAttribute('data-type');
   document.getElementById('ev-type').value=selEvType;
@@ -1199,6 +1297,13 @@ function selEvType(el){
   el.classList.add('sel');
 }
 function saveEvent(){
+  if(editEvId){
+    var evExistant=(db.events||[]).find(function(x){return String(x.id)===String(editEvId);});
+    if(evExistant&&evExistant.statut==='termine'&&_deverrouillageTemporaireEvId!==editEvId){
+      alert('Ce chantier est terminé et verrouillé. Cliquez sur "🔓 Déverrouiller pour modifier" si vous devez vraiment le corriger.');
+      return;
+    }
+  }
   var titre=document.getElementById('ev-titre').value.trim();
   if(!titre){alert('Titre obligatoire.');return;}
   var start=document.getElementById('ev-start').value;
@@ -1226,13 +1331,16 @@ function saveEvent(){
     type:selEvType,
     statut:document.getElementById('ev-statut').value,
     noteProchainRdv:document.getElementById('ev-note-prochain-rdv').value.trim(),
+    documentId:document.getElementById('ev-document').value?(parseInt(document.getElementById('ev-document').value,10)||document.getElementById('ev-document').value):null,
+    consignesSecurite:document.getElementById('ev-consignes-securite').value.trim(),
     equipe:recupererEquipeSelectionneeFormulaire(),
     materiel:materielFormulaireEnCours.slice()
   };
   var ancienStatut=null;
+  var ancienneEquipe=[];
   if(editEvId){
     var i=db.events.findIndex(function(x){return String(x.id)===String(editEvId);});
-    if(i>-1){ancienStatut=db.events[i].statut;db.events[i]=Object.assign({},db.events[i],obj);}
+    if(i>-1){ancienStatut=db.events[i].statut;ancienneEquipe=db.events[i].equipe||[];db.events[i]=Object.assign({},db.events[i],obj);}
     traceEvent('modif_evenement',titre+' — '+start);
   }else{
     obj.id=Date.now();
@@ -1241,14 +1349,75 @@ function saveEvent(){
   }
   pushEvents();
   var idPourRappel=editEvId||obj.id;
+  var evFinal=editEvId?db.events[i]:obj;
+  var nouveauxMembres=(obj.equipe||[]).filter(function(nom){return ancienneEquipe.indexOf(nom)===-1;});
   closeModal('modal-event');
   renderAll();
   if(obj.statut==='termine'&&ancienStatut!=='termine')afficherRappelMaterielARamener(idPourRappel);
+  if(nouveauxMembres.length)envoyerEmailAffectationChantier(evFinal,nouveauxMembres);
 }
 // ═══ RAPPEL MATERIEL A RAMENER : quand un chantier passe au statut "Terminé", verifie
 // s'il reste des outils encore sortis pour ce chantier (via l'historique du materiel
 // suivi) et/ou des elements de la checklist materiel non coches, et le rappelle avant que
 // l'ouvrier ne quitte le chantier. ═══
+// ═══════════════════════════════════════════════════════════════════════
+// EMAIL D'AFFECTATION CHANTIER : quand un artisan est ajoute a l'equipe d'un chantier (a la
+// creation ou en modifiant l'equipe d'un chantier existant), il recoit un email avec le
+// resume complet du devis/facture lie (si renseigne), les notes du chantier, et les
+// consignes de securite specifiques. Reutilise le meme compte EmailJS que gestion-devis-
+// factures.html (configuration partagee via db.params).
+// ═══════════════════════════════════════════════════════════════════════
+var _emailjsReadyAgenda=false;
+function initEmailJSAgenda(){
+  var p=db.params||{};
+  if(!p.emailjsActif||!p.emailjsPublicKey){_emailjsReadyAgenda=false;return;}
+  try{emailjs.init({publicKey:p.emailjsPublicKey});_emailjsReadyAgenda=true;}catch(e){console.error('Erreur init EmailJS agenda:',e);_emailjsReadyAgenda=false;}
+}
+
+function envoyerEmailAffectationChantier(ev,listeArtisans){
+  initEmailJSAgenda();
+  var p=db.params||{};
+  if(!_emailjsReadyAgenda){console.warn('EmailJS non configuré — email d\'affectation chantier non envoyé.');return;}
+
+  var c=ev.clientId?(db.clients||[]).find(function(x){return x.id===ev.clientId;}):null;
+  var doc=ev.documentId?(db.documents||[]).find(function(x){return x.id===ev.documentId;}):null;
+
+  var blocDocument='Aucun devis/facture lié à ce chantier.';
+  if(doc){
+    var lignesTxt=(doc.lignes||[]).map(function(l){return '  - '+(l.designation||l.description||'')+' : '+(l.quantite||1)+' x '+(l.prixUnitaire||l.prix||0)+' € = '+((l.quantite||1)*(l.prixUnitaire||l.prix||0)).toFixed(2)+' €';}).join('\n');
+    blocDocument=(doc.type==='devis'?'Devis':'Facture')+' n° '+doc.numero+' du '+fmtDate(doc.date)+'\n'+
+      'Objet : '+(doc.objet||'—')+'\n'+
+      'Montant total HT : '+(doc.totalHT||0).toFixed(2)+' €'+
+      (lignesTxt?('\n\nDétail des lignes :\n'+lignesTxt):'');
+  }
+
+  var corpsCommun='Chantier : '+(ev.titre||'')+'\n'+
+    'Client : '+(c?c.nom:'—')+'\n'+
+    'Adresse : '+(ev.lieu||'—')+'\n'+
+    'Date(s) : '+fmtDate(ev.start)+(ev.end&&ev.end!==ev.start?(' au '+fmtDate(ev.end)):'')+
+    (ev.hstart?(' de '+ev.hstart+' à '+(ev.hend||'')):'')+'\n\n'+
+    '── Devis/Facture lié ──\n'+blocDocument+'\n\n'+
+    '── Notes pour ce chantier ──\n'+(ev.notes||'Aucune note particulière.')+'\n\n'+
+    '── ⚠️ Consignes de sécurité ──\n'+(ev.consignesSecurite||'Aucune consigne particulière signalée — restez vigilant(e) comme d\'habitude.')+'\n\n'+
+    (p.nom||'NICO MULTISERVICES');
+
+  listeArtisans.forEach(function(nom){
+    var salarie=(_salariesEquipe||[]).find(function(s){return s.nom===nom;});
+    if(!salarie||!salarie.email){console.warn('Aucun email trouvé pour '+nom+' — email d\'affectation non envoyé.');return;}
+    var prenom=salarie.prenom||nom.split(' ')[0]||'';
+    var form=document.getElementById('ej-hidden-form-agenda');
+    form.to_email.value=salarie.email;
+    form.to_name.value=prenom;
+    form.cc_email.value='';
+    form.subject.value='🔨 Nouveau chantier assigné — '+(ev.titre||'');
+    form.message.value='Bonjour '+prenom+',\n\nVous avez été affecté(e) au chantier suivant :\n\n'+corpsCommun;
+    form.from_name.value=p.nom||'NICO MULTISERVICES';
+    emailjs.sendForm(p.emailjsServiceId,p.emailjsTemplateId,form)
+      .then(function(){traceEvent('email_affectation_chantier',nom+' — '+ev.titre);})
+      .catch(function(e){console.error('Erreur envoi email affectation chantier à '+nom+':',e);});
+  });
+}
+
 function afficherRappelMaterielARamener(eventId){
   var ev=(db.events||[]).find(function(x){return String(x.id)===String(eventId);});
   if(!ev)return;
@@ -1265,6 +1434,11 @@ function afficherRappelMaterielARamener(eventId){
 
 function askDeleteEvent(id){editEvId=id;deleteEvent();}
 function deleteEvent(){
+  var evAvantSuppr=(db.events||[]).find(function(x){return String(x.id)===String(editEvId);});
+  if(evAvantSuppr&&evAvantSuppr.statut==='termine'&&_deverrouillageTemporaireEvId!==editEvId){
+    alert('Ce chantier est terminé et verrouillé. Déverrouillez-le d\'abord si vous devez vraiment le supprimer.');
+    return;
+  }
   if(!confirm('Supprimer cet événement ?'))return;
   var ev=(db.events||[]).find(function(x){return String(x.id)===String(editEvId);});
   db.events=(db.events||[]).filter(function(x){return String(x.id)!==String(editEvId);});
@@ -1377,22 +1551,33 @@ function openSuiviModal(id){
   if(champRetourEl)champRetourEl.value=dateRetourDefaut;
   var remplirSelectEmploye=function(){
     var sel=document.getElementById('suivi-pointage-employe');
-    var selMat=document.getElementById('suivi-materiel-employe');
     var selRapide=document.getElementById('pointage-rapide-employe');
+    var champMat=document.getElementById('suivi-materiel-employe');
+    var champMatAffiche=document.getElementById('suivi-materiel-employe-affiche');
     // Priorite a l'equipe assignee au chantier ; sinon tous les salaries connus
     var equipe=ev.equipe&&ev.equipe.length?ev.equipe:_salariesEquipe.map(function(s){return s.nom;});
-    if(!equipe.length){sel.innerHTML='<option value="">Aucun salarié</option>';selMat.innerHTML='<option value="">Aucun salarié</option>';selRapide.innerHTML='<option value="">Aucun salarié</option>';}
+    if(!equipe.length){sel.innerHTML='<option value="">Aucun salarié</option>';selRapide.innerHTML='<option value="">Aucun salarié</option>';}
     else{
       var options=equipe.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
       sel.innerHTML=options;
-      selMat.innerHTML='<option value="">-- Sélectionner --</option>'+options;
       selRapide.innerHTML=options;
       // Pre-selectionne automatiquement l'employe connecte s'il fait partie de l'equipe/liste
       if(_salarieConnecteAgenda&&equipe.indexOf(_salarieConnecteAgenda.nom)!==-1){
         sel.value=_salarieConnecteAgenda.nom;
-        selMat.value=_salarieConnecteAgenda.nom;
         selRapide.value=_salarieConnecteAgenda.nom;
       }
+    }
+    // Prise de materiel : identite deduite du compte connecte, non modifiable — evite
+    // qu'un ouvrier prenne un outil "au nom" d'un collegue par erreur ou par facilite.
+    if(_salarieConnecteAgenda&&_salarieConnecteAgenda.nom){
+      champMat.value=_salarieConnecteAgenda.nom;
+      champMatAffiche.textContent='👤 '+_salarieConnecteAgenda.nom;
+    }else if(fbUser){
+      champMat.value=fbUser.email;
+      champMatAffiche.innerHTML='👤 '+esc(fbUser.email)+' <span style="font-weight:400;color:var(--muted)">(profil salarié non lié — demandez à l\'administrateur de renseigner votre email sur votre fiche salarié)</span>';
+    }else{
+      champMat.value='';
+      champMatAffiche.textContent='—';
     }
     majAffichagePointageRapide();
   };
@@ -1877,6 +2062,75 @@ function envoyerSignalementIncident(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// GENERATEUR DE PANNEAU DE CHANTIER : cree un panneau A4 imprimable (info travaux) a
+// afficher sur site — nature des travaux, dates, coordonnees de l'entreprise. Pre-rempli
+// a partir du chantier en cours de suivi quand disponible.
+// ═══════════════════════════════════════════════════════════════════════
+function ouvrirGenerateurPanneauChantier(){
+  var ev=suiviEvId?(db.events||[]).find(function(x){return String(x.id)===String(suiviEvId);}):null;
+  document.getElementById('pc-nature').value=ev?ev.titre:'';
+  document.getElementById('pc-date-debut').value=ev?ev.start:todayStr();
+  document.getElementById('pc-date-fin').value=ev?(ev.end||ev.start):todayStr();
+  document.getElementById('pc-message').value='';
+  closeModal('modal-suivi');
+  openModal('modal-panneau-chantier');
+}
+
+function genererPanneauChantierPDF(){
+  var nature=document.getElementById('pc-nature').value.trim()||'Travaux en cours';
+  var dateDebut=document.getElementById('pc-date-debut').value;
+  var dateFin=document.getElementById('pc-date-fin').value;
+  var message=document.getElementById('pc-message').value.trim();
+  var p=db.params||{};
+
+  var pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+  var largeur=210,hauteur=297;
+
+  // Cadre exterieur
+  pdf.setDrawColor(20);pdf.setLineWidth(1.2);
+  pdf.rect(8,8,largeur-16,hauteur-16);
+
+  var y=32;
+  pdf.setFontSize(13);pdf.setFont(undefined,'bold');pdf.setTextColor(90);
+  pdf.text('CHANTIER EN COURS',105,y,{align:'center'});y+=18;
+
+  pdf.setFontSize(26);pdf.setTextColor(20);
+  var ligneNature=pdf.splitTextToSize(nature.toUpperCase(),170);
+  pdf.text(ligneNature,105,y,{align:'center'});y+=ligneNature.length*11+14;
+
+  pdf.setDrawColor(200);pdf.setLineWidth(.4);pdf.line(40,y,170,y);y+=14;
+
+  pdf.setFontSize(14);pdf.setFont(undefined,'normal');
+  if(dateDebut){
+    var texteDates=dateFin&&dateFin!==dateDebut?('Du '+fmtDate(dateDebut)+' au '+fmtDate(dateFin)):('Le '+fmtDate(dateDebut));
+    pdf.text(texteDates,105,y,{align:'center'});y+=12;
+  }
+
+  if(message){
+    y+=6;
+    pdf.setFontSize(12);pdf.setTextColor(60);
+    var lignesMsg=pdf.splitTextToSize(message,150);
+    pdf.text(lignesMsg,105,y,{align:'center'});
+    y+=lignesMsg.length*6+6;
+  }
+
+  // Bloc entreprise en bas de page
+  var yBas=hauteur-55;
+  pdf.setDrawColor(20);pdf.setLineWidth(.6);pdf.line(30,yBas,180,yBas);yBas+=12;
+  pdf.setFontSize(16);pdf.setFont(undefined,'bold');pdf.setTextColor(20);
+  pdf.text(p.nom||'NICO MULTISERVICES',105,yBas,{align:'center'});yBas+=9;
+  pdf.setFontSize(12);pdf.setFont(undefined,'normal');pdf.setTextColor(60);
+  if(p.tel){pdf.text('☎ '+p.tel,105,yBas,{align:'center'});yBas+=7;}
+  if(p.email){pdf.text(p.email,105,yBas,{align:'center'});yBas+=7;}
+
+  pdf.setFontSize(9);pdf.setTextColor(140);
+  pdf.text('Merci de votre compréhension pour la gêne occasionnée.',105,hauteur-14,{align:'center'});
+
+  pdf.save('Panneau_chantier_'+nature.replace(/[^a-z0-9]+/gi,'_').slice(0,40)+'.pdf');
+  closeModal('modal-panneau-chantier');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // CARNET DE BORD VEHICULES : kilometrage, revision, controle technique.
 // Meme principe d'alerte que pour le materiel soumis a controle periodique.
 // Stocke dans db.vehicules[], synchronise via pushVehicules().
@@ -2317,6 +2571,15 @@ document.getElementById('day-picker').value=todayStr();
     </div>
   </div>
 </div>
+
+<form id="ej-hidden-form-agenda" style="display:none">
+  <input type="hidden" name="to_email">
+  <input type="hidden" name="to_name">
+  <input type="hidden" name="cc_email">
+  <input type="hidden" name="subject">
+  <input type="hidden" name="message">
+  <input type="hidden" name="from_name">
+</form>
 
 </body>
 </html>
